@@ -76,7 +76,7 @@ def write_step_summary(path, summary, rules):
     u = summary["findings_unique"]
     icon = "❌" if summary["failed"] else "✅"
     with open(path, "w", encoding="utf-8") as f:
-        f.write(f"### {icon} {summary['project']} — {summary['url']}\n\n"
+        f.write(f"### {icon} {summary['project']}\n\n"
                 f"Страниц: {summary['pages']} · адресов: {summary.get('urls_checked', 0)} · "
                 f"ошибок: {u.get('error', 0)} · предупреждений: {u.get('warning', 0)} · "
                 f"к сведению: {u.get('info', 0)} · {summary['duration_s']} с\n\n"

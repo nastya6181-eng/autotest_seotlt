@@ -2,8 +2,9 @@
 """Общие проверки сайтов: орфография, типографика, ссылки.
 
 Сайты задаются переменными окружения (локально — ещё и файлом .env в корне):
-    SITES       все сайты: по одному на строку или через запятую, «ключ=https://адрес»
-                или просто адрес. Не задан — берутся сайты из папок projects/
+    SITES       все сайты, по строке на сайт: «ключ=https://адрес [опция=значение ...]».
+                Опции: max_pages, delay, max_rps, cooldown, ignore_robots, exclude, workers.
+                В GitHub — секрет репозитория SITES.
     SITE        прогнать только один: ключ из SITES или любой адрес
     MAX_PAGES   переопределить лимит страниц
     MAX_RPS     не чаще N запросов в секунду к сайту (поверх max_rps из project.yml)
@@ -11,12 +12,12 @@
 
 Примеры:
     python common/run_checks.py                                  # все сайты из SITES
-    SITE=innotech python common/run_checks.py                    # один по ключу
+    SITE=site-a python common/run_checks.py                      # один по ключу
     SITE=https://example.ru/ MAX_PAGES=30 python common/run_checks.py
-    python common/run_checks.py --site lazun --only links        # то же флагами
+    python common/run_checks.py --site site-a --only links       # то же флагами
 
-Если домен сайта совпадает с url в projects/<ключ>/project.yml, применяются настройки
-этого проекта (исключения орфографии, уровни правил, robots и т. д.).
+Настройки сайта: умолчания ← projects/<ключ>/project.yml (если есть) ← опции из строки SITES
+← MAX_PAGES / MAX_RPS / CHECKS ← флаги.
 
 Этапы (в пайплайне идут отдельными шагами, локально по умолчанию все подряд):
     --stage crawl             обход сайта → reports/<ключ>/crawl.json
@@ -57,10 +58,9 @@ DEFAULTS = {
 
 
 def load_config(site, max_pages=None, only=None):
-    """Настройки сайта: умолчания ← projects/<ключ>/project.yml ← env и флаги."""
+    """Настройки сайта: умолчания ← projects/<ключ>/project.yml ← опции из SITES ← env и флаги."""
     cfg = {**DEFAULTS, "checks": {k: dict(v) for k, v in DEFAULTS["checks"].items()}}
-    project = site["key"] if sites.project_url(site["key"]) else sites.project_for(site["url"])
-    project_dir = os.path.join(sites.PROJECTS, project) if project else None
+    project_dir = sites.project_dir(site["key"])
     if project_dir:
         with open(os.path.join(project_dir, "project.yml"), encoding="utf-8") as f:
             data = yaml.safe_load(f) or {}
@@ -70,6 +70,10 @@ def load_config(site, max_pages=None, only=None):
                     cfg["checks"][name] = opts or {}
             else:
                 cfg[k] = v
+    options = dict(site.get("options", {}))
+    if "workers" in options:
+        cfg["checks"].setdefault("links", {})["workers"] = options.pop("workers")
+    cfg.update(options)
     cfg["url"] = site["url"]
     cfg["key"] = site["key"]
     cfg.setdefault("name", site["key"])
@@ -223,7 +227,7 @@ def main():
             print(f"{s['key']}={s['url']}")
         return
     if not targets:
-        sys.exit("Нет сайтов: задай SITES или SITE (в окружении или в .env), либо заведи projects/<ключ>/")
+        sys.exit("Нет сайтов: задай SITES или SITE (в окружении, в .env или секретом в GitHub)")
     codes = [check_site(load_config(s, args.max_pages, args.only), os.path.join(args.out, s["key"]), args.stage)
              for s in targets]
     sys.exit(max(codes))

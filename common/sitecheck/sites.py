@@ -1,9 +1,13 @@
-"""Список сайтов из переменных окружения и привязка сайта к папке проекта.
+"""Список сайтов из переменных окружения.
 
-SITES — все сайты для прогона: по одному на строку (или через запятую),
-        «ключ=https://адрес» или просто «https://адрес». # — комментарий.
-SITE  — один сайт: адрес или ключ из SITES / projects/.
-Переменные читаются из окружения, а локально ещё и из файла .env в корне репозитория.
+SITES — все сайты для прогона, по одному на строку:
+            ключ=https://адрес [опция=значение ...]
+        Опции переопределяют настройки сайта: max_pages, delay, max_rps, cooldown,
+        ignore_robots, exclude, workers. В GitHub SITES хранится секретом репозитория.
+SITE  — один сайт: ключ из SITES или любой адрес (разовый прогон с настройками по умолчанию).
+
+Локально переменные читаются ещё и из файла .env в корне репозитория.
+Если есть папка projects/<ключ>/ с project.yml, её настройки применяются к сайту с этим ключом.
 """
 import os
 import re
@@ -11,6 +15,9 @@ from urllib.parse import urlparse
 
 ROOT = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 PROJECTS = os.path.join(ROOT, "projects")
+OPTIONS = {"max_pages": int, "delay": float, "max_rps": float, "cooldown": float,
+           "ignore_robots": lambda v: v.lower() in ("1", "true", "yes", "да"), "exclude": str,
+           "workers": int}
 
 
 def load_dotenv(path=os.path.join(ROOT, ".env")):
@@ -27,70 +34,47 @@ def load_dotenv(path=os.path.join(ROOT, ".env")):
 
 
 def host(url):
-    return urlparse(url).netloc.lower().removeprefix("www.")
+    return (urlparse(url).hostname or "").lower().removeprefix("www.")
 
 
 def key_from_url(url):
     return re.sub(r"[^a-z0-9]+", "-", host(url) + urlparse(url).path.rstrip("/")).strip("-")
 
 
-def project_url(key):
-    path = os.path.join(PROJECTS, key, "project.yml")
-    if not os.path.exists(path):
-        return None
-    with open(path, encoding="utf-8") as f:
-        m = re.search(r"^url:\s*['\"]?(\S+?)['\"]?\s*$", f.read(), re.M)
-    return m.group(1) if m else None
+def project_dir(key):
+    path = os.path.join(PROJECTS, key)
+    return path if os.path.exists(os.path.join(path, "project.yml")) else None
 
 
-def project_keys():
-    if not os.path.isdir(PROJECTS):
-        return []
-    return sorted(d for d in os.listdir(PROJECTS)
-                  if not d.startswith("_") and os.path.exists(os.path.join(PROJECTS, d, "project.yml")))
-
-
-def project_for(url):
-    """Папка projects/<ключ>, чей url на том же домене, или None."""
-    for key in project_keys():
-        purl = project_url(key)
-        if purl and host(purl) == host(url):
-            return key
-    return None
+def parse_line(line):
+    parts = line.split()
+    head, opts = parts[0], parts[1:]
+    key, url = head.split("=", 1) if re.match(r"^[\w-]+=", head) else ("", head)
+    if not re.match(r"^https?://", url):
+        url = "https://" + url
+    options = {}
+    for opt in opts:
+        name, sep, value = opt.partition("=")
+        if not sep or name not in OPTIONS:
+            raise SystemExit(f"Опция «{opt}» у сайта {key or url}: допустимо {', '.join(OPTIONS)}")
+        options[name] = OPTIONS[name](value)
+    return {"key": key or key_from_url(url), "url": url, "options": options}
 
 
 def parse_sites(raw):
-    sites = []
-    for item in re.split(r"[\n,]+", raw or ""):
-        item = item.split("#", 1)[0].strip()
-        if not item:
-            continue
-        key, _, url = item.rpartition("=") if re.match(r"^[\w-]+=", item) else ("", "", item)
-        if not re.match(r"^https?://", url):
-            url = "https://" + url
-        sites.append({"key": key or project_for(url) or key_from_url(url), "url": url})
-    return sites
-
-
-def all_sites():
-    """SITES из окружения; если не задан — сайты из папок projects/."""
-    sites = parse_sites(os.environ.get("SITES"))
-    if sites:
-        return sites
-    return [{"key": k, "url": project_url(k)} for k in project_keys() if project_url(k)]
+    lines = (l.split("#", 1)[0].strip() for l in (raw or "").splitlines())
+    return [parse_line(l) for l in lines if l]
 
 
 def select(site=None):
-    """Отфильтровать по SITE: ключ или адрес. Адрес не из списка — разовый прогон."""
+    """Сайты из SITES, отфильтрованные по SITE: ключ или адрес. Адрес не из списка — разовый прогон."""
     site = (site if site is not None else os.environ.get("SITE", "")).strip()
-    sites = all_sites()
+    sites = parse_sites(os.environ.get("SITES"))
     if not site or site == "all":
         return sites
     found = [s for s in sites if s["key"] == site or s["url"].rstrip("/") == site.rstrip("/")]
     if found:
         return found
-    if project_url(site):
-        return [{"key": site, "url": project_url(site)}]
     if "." in site:
-        return parse_sites(site)
-    raise SystemExit(f"Сайт «{site}» не найден ни в SITES, ни в projects/")
+        return [{**parse_line(site), "adhoc": True}]
+    raise SystemExit(f"Сайта «{site}» нет в SITES")

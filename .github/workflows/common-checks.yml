@@ -10,7 +10,7 @@ on:
   workflow_dispatch:
     inputs:
       site:
-        description: "Ключ сайта из SITES, любой адрес https://… или all"
+        description: "Ключ сайта из секрета SITES, любой адрес https://… или all"
         default: all
       max_pages:
         description: "Страниц на сайт (пусто — из project.yml или 200)"
@@ -73,14 +73,15 @@ jobs:
       - name: Список сайтов
         id: sites
         env:
-          # Переменная репозитория SITES (Settings → Secrets and variables → Actions → Variables):
-          # по строке на сайт, «ключ=https://адрес». Нет её — берутся сайты из projects/.
-          SITES: ${{ vars.SITES }}
+          # Секрет репозитория SITES (Settings → Secrets and variables → Actions → Secrets):
+          # по строке на сайт, «ключ=https://адрес [опция=значение ...]». В матрицу уходят только ключи.
+          SITES: ${{ secrets.SITES }}
           SITE: ${{ inputs.site || 'all' }}
         run: |
+          python common/list_sites.py --mask
           sites=$(python common/list_sites.py)
-          [ "$sites" != "[]" ] || { echo "::error::Нет сайтов: заведи переменную SITES"; exit 1; }
-          echo "$sites" | jq -r '.[] | "\(.key) → \(.url)"'
+          [ "$sites" != "[]" ] || { echo "::error::Нет сайтов: заведи секрет SITES"; exit 1; }
+          echo "$sites" | jq -r '"Сайтов: \(length) — " + (map(.key) | join(", "))'
           echo "sites=$sites" >> "$GITHUB_OUTPUT"
 
   # ─────────────────────── этап 2: тесты, по чанку на сайт ───────────────────────
@@ -97,8 +98,8 @@ jobs:
       matrix:
         site: ${{ fromJson(needs.infra.outputs.sites) }}
     env:
-      SITES: ${{ matrix.site.key }}=${{ matrix.site.url }}
-      SITE: ${{ matrix.site.key }}
+      SITES: ${{ secrets.SITES }}
+      SITE: ${{ matrix.site.url || matrix.site.key }}
       MAX_PAGES: ${{ inputs.max_pages || (github.event_name == 'push' && '20') || '' }}
       CHECKS: ${{ inputs.checks }}
       OUT: reports/${{ matrix.site.key }}
@@ -111,6 +112,9 @@ jobs:
           cache: pip
 
       - run: pip install -r requirements.txt
+
+      - name: Спрятать адреса сайтов в логах
+        run: python common/list_sites.py --mask
 
       - name: Словари из кэша
         uses: actions/cache/restore@v4
@@ -170,6 +174,15 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+
+      - name: Спрятать адреса сайтов в логах
+        env:
+          SITES: ${{ secrets.SITES }}
+        run: python common/list_sites.py --mask
+
       - name: Забрать результаты всех чанков
         uses: actions/download-artifact@v4
         with:
@@ -185,7 +198,7 @@ jobs:
             echo "|---|---|---|---|---|---|"
             for s in collected/report-*/summary.json; do
               [ -f "$s" ] || continue
-              jq -r '"| [\(.project)](\(.url)) | \(.pages) | \(.findings_unique.error // 0) | \(.findings_unique.warning // 0) | \(.findings_unique.info // 0) | \(if .failed then "❌" else "✅" end) |"' "$s"
+              jq -r '"| \(.project) | \(.pages) | \(.findings_unique.error // 0) | \(.findings_unique.warning // 0) | \(.findings_unique.info // 0) | \(if .failed then "❌" else "✅" end) |"' "$s"
             done
             for d in collected/report-*/; do
               [ -f "$d/summary.json" ] || echo "| $(basename "$d" | sed 's/^report-//') | — | — | — | — | ❌ отчёта нет, см. логи |"
