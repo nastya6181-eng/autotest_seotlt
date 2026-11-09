@@ -4,6 +4,7 @@ import sys
 import unittest
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "common"))
+os.environ.pop("REPORT_FULL_URLS", None)  # тесты режима по умолчанию; полные адреса — в своём тесте
 from sitecheck import seo  # noqa: E402
 from sitecheck.crawler import Page, PageParser  # noqa: E402
 from sitecheck.tech import robots_blocks_all  # noqa: E402

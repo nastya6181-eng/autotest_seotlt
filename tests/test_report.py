@@ -7,6 +7,7 @@ import unittest
 
 ROOT = os.path.join(os.path.dirname(__file__), "..")
 sys.path.insert(0, os.path.join(ROOT, "common"))
+os.environ.pop("REPORT_FULL_URLS", None)  # тесты режима по умолчанию; полные адреса — в своём тесте
 from sitecheck import report  # noqa: E402
 from sitecheck.findings import Finding  # noqa: E402
 
@@ -33,8 +34,9 @@ def code_digest():
 
 class ReportTest(unittest.TestCase):
     def test_writes_only_into_out_dir(self):
+        from unittest import mock
         before, cwd = code_digest(), os.getcwd()
-        with tempfile.TemporaryDirectory() as out:
+        with tempfile.TemporaryDirectory() as out, mock.patch.dict(os.environ, {"REPORT_FULL_URLS": ""}):
             os.chdir(ROOT)
             try:
                 report.write_all(out, META, FINDINGS, RULES, ["error", "warning"])
@@ -55,6 +57,25 @@ class ReportTest(unittest.TestCase):
             report.write_all(out, META, FINDINGS, RULES, ["error", "warning"])
             page = open(os.path.join(out, "summary.md"), encoding="utf-8").read()
         self.assertIn("[/b/](https://site.ru/b/)", page)
+
+    def test_page_level_reason_is_kept(self):
+        failed = Finding("links", "page_failed", "error", "Страница не открылась: 403", "", "https://site.ru/x/")
+        rules = {"links.page_failed": ("error", "Страница сайта не открылась при обходе")}
+        log = report.format_test_log("links", rules, [failed], ["error"], base="https://site.ru/")
+        self.assertIn("почему:   Страница не открылась: 403", log)
+        text = report.summary_text({**META, "failed": True, "fail_on": ["error"], "findings_unique": {"error": 1},
+                                    "by_rule": {"links.page_failed": 1}}, rules, report.group([failed]), 200)
+        self.assertIn("Страница не открылась: 403", text)
+
+    def test_summary_fits_github_limit(self):
+        many = [Finding("spelling", "unknown_word", "warning", "Слово", f"слово{i}" * 10,
+                        f"https://site.ru/{'p' * 200}{i}/", "к" * 160) for i in range(3000)]
+        rules = {"spelling.unknown_word": ("warning", "Слово")}
+        summary = report.build_summary(META, many, rules, ["warning"])
+        with tempfile.TemporaryDirectory() as out:
+            path = os.path.join(out, "s.md")
+            report.write_step_summary(path, summary, rules, report.group(many))
+            self.assertLessEqual(os.path.getsize(path), report.MAX_SUMMARY_BYTES)
 
     def test_test_log_marks_rules(self):
         log = report.format_test_log("seo", {"seo.missing_h1": RULES["seo.missing_h1"],

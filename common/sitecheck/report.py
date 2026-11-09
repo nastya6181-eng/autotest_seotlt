@@ -142,6 +142,8 @@ def format_test_log(name, rules, findings, fail_on, base="", limit=100):
             if not f.fragment or f.fragment == f.page:
                 for p in pages[:limit - shown]:
                     lines.append(f"   ✘ {show(p, base)}")
+                    if f.message != title:
+                        lines.append(f"       почему:   {scrub(f.message, base)[:160]}")
                     shown += 1
                 continue
             shown += 1
@@ -198,16 +200,30 @@ def link(url, base):
     return f"[{cell(relative(url, base))}]({url})" if full_urls() and url.startswith("http") else shown
 
 
-def write_step_summary(path, summary, rules, groups=(), limit=200):
-    """Полный отчёт на странице прогона: правила, и по каждому упавшему — как исправить,
-    страницы, фрагмент, контекст. Отдельного файла-отчёта нет: всё здесь и в логе теста."""
+MAX_SUMMARY_BYTES = 900_000  # GitHub не показывает сводку шага больше 1 МиБ
+
+
+def write_step_summary(path, summary, rules, groups=()):
+    """Полный отчёт на странице прогона. Если не влезает в лимит GitHub — меньше строк на правило."""
+    for limit in (200, 60, 20, 5):
+        text = summary_text(summary, rules, groups, limit)
+        if len(text.encode("utf-8")) <= MAX_SUMMARY_BYTES:
+            break
+    with open(path, "w", encoding="utf-8") as f:
+        f.write(text)
+
+
+def summary_text(summary, rules, groups, limit):
+    """Правила, и по каждому с замечаниями — как исправить, страницы, фрагмент, контекст."""
+    from io import StringIO
+    f = StringIO()
     u = summary["findings_unique"]
     base = summary["url"]
     rows_of = dict(by_rule(groups))
     failed_rules = [r for r in rows_of if rules[r][0] in summary["fail_on"]]
     passed = [r for r, (sev, _) in rules.items() if sev != "off" and r not in rows_of]
     icon = "❌" if summary["failed"] else "✅"
-    with open(path, "w", encoding="utf-8") as f:
+    if True:
         f.write(f"## {icon} {summary['project']}\n\n"
                 f"Страниц: {summary['pages']} · адресов: {summary.get('urls_checked', 0)} · "
                 f"правил упало: {len(failed_rules)} из {len(rules)} · "
@@ -233,21 +249,23 @@ def write_step_summary(path, summary, rules, groups=(), limit=200):
             n = 0
             for g in rows:
                 y, pages = g["f"], g["pages"]
-                what = cell(show_fragment(y.fragment, base))[:120] if y.fragment and y.fragment != y.page else "—"
+                page_level = not y.fragment or y.fragment == y.page
+                what = "—" if page_level else cell(show_fragment(y.fragment, base))[:120]
                 if y.message != title:
                     what += f"<br><sub>{cell(scrub(y.message, base))[:120]}</sub>"
                 ctx = cell(scrub(y.context, base))[:160]
-                for p in pages if what == "—" else pages[:1]:
+                for p in pages if page_level else pages[:1]:
                     if n >= limit:
                         break
                     more = f" <sub>и ещё {len(pages) - 1} стр.: " + ", ".join(link(x, base) for x in pages[1:10]) \
-                        + (" …" if len(pages) > 10 else "") + "</sub>" if what != "—" and len(pages) > 1 else ""
+                        + (" …" if len(pages) > 10 else "") + "</sub>" if not page_level and len(pages) > 1 else ""
                     f.write(f"| {link(p, base)}{more} | {what} | {ctx} |\n")
                     n += 1
             total = sum(len(g["pages"]) if not g["f"].fragment or g["f"].fragment == g["f"].page else 1 for g in rows)
             if total > n:
                 f.write(f"\nЕщё {total - n} — в артефакте прогона, файл findings.csv.\n")
             f.write("\n</details>\n")
+    return f.getvalue()
 
 
 def write_junit(path, summary, groups, rules):
