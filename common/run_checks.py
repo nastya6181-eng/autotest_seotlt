@@ -1,31 +1,47 @@
 #!/usr/bin/env python3
-"""Общие проверки сайта: орфография, типографика, ссылки.
+"""Общие проверки сайтов: орфография, типографика, ссылки.
 
-Запуск по проекту (настройки в projects/<проект>/project.yml):
-    python common/run_checks.py projects/innotech
-Разовый запуск по любому адресу:
-    python common/run_checks.py --url https://example.ru/ --max-pages 50
-Только часть проверок:
-    python common/run_checks.py projects/innotech --only links,typography
+Сайты задаются переменными окружения (локально — ещё и файлом .env в корне):
+    SITES       все сайты: по одному на строку или через запятую, «ключ=https://адрес»
+                или просто адрес. Не задан — берутся сайты из папок projects/
+    SITE        прогнать только один: ключ из SITES или любой адрес
+    MAX_PAGES   переопределить лимит страниц
+    CHECKS      только эти проверки: spelling,typography,links
 
-Отчёты пишутся в reports/<проект>/: report.md, findings.csv, summary.json,
-summary.md (для страницы прогона), junit.xml (для GitHub Checks).
-Код выхода: 0 — ошибок нет, 1 — есть замечания уровня из fail_on, 2 — сбой запуска.
+Примеры:
+    python common/run_checks.py                                  # все сайты из SITES
+    SITE=innotech python common/run_checks.py                    # один по ключу
+    SITE=https://example.ru/ MAX_PAGES=30 python common/run_checks.py
+    python common/run_checks.py --site lazun --only links        # то же флагами
+
+Если домен сайта совпадает с url в projects/<ключ>/project.yml, применяются настройки
+этого проекта (исключения орфографии, уровни правил, robots и т. д.).
+
+Этапы (в пайплайне идут отдельными шагами, локально по умолчанию все подряд):
+    --stage crawl             обход сайта → reports/<ключ>/crawl.json
+    --stage test --only links один тест по обходу → reports/<ключ>/tests/links.json
+    --stage report            сводный отчёт по сайту из всех тестов
+
+Отчёты: reports/<ключ>/ — report.md, findings.csv, summary.json, summary.md, junit.xml.
+Код выхода: 0 — ошибок нет, 1 — есть замечания уровня из fail_on, 2 — сайт не открылся.
 """
 import argparse
 import datetime as dt
+import json
 import os
 import re
 import sys
 import time
+from collections import Counter
+from dataclasses import asdict
 
 import yaml
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
-from sitecheck import crawler, links, report, spelling, typography  # noqa: E402
-from sitecheck.findings import SEVERITIES  # noqa: E402
+from sitecheck import crawler, links, report, sites, spelling, typography  # noqa: E402
+from sitecheck.findings import SEVERITIES, Finding  # noqa: E402
 
-ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+ROOT = sites.ROOT
 COMMON = os.path.join(ROOT, "common")
 CHECKS = {m.NAME: m for m in (spelling, typography, links)}
 DEFAULTS = {
@@ -39,11 +55,12 @@ DEFAULTS = {
 }
 
 
-def load_config(args):
+def load_config(site, max_pages=None, only=None):
+    """Настройки сайта: умолчания ← projects/<ключ>/project.yml ← env и флаги."""
     cfg = {**DEFAULTS, "checks": {k: dict(v) for k, v in DEFAULTS["checks"].items()}}
-    project_dir = None
-    if args.project:
-        project_dir = os.path.abspath(args.project)
+    project = site["key"] if sites.project_url(site["key"]) else sites.project_for(site["url"])
+    project_dir = os.path.join(sites.PROJECTS, project) if project else None
+    if project_dir:
         with open(os.path.join(project_dir, "project.yml"), encoding="utf-8") as f:
             data = yaml.safe_load(f) or {}
         for k, v in data.items():
@@ -52,17 +69,16 @@ def load_config(args):
                     cfg["checks"][name] = opts or {}
             else:
                 cfg[k] = v
-        cfg.setdefault("key", os.path.basename(project_dir))
-    if args.url:
-        cfg["url"] = args.url
-    if not cfg.get("url"):
-        sys.exit("Нужен проект (папка с project.yml) или --url")
-    cfg.setdefault("key", re.sub(r"\W+", "-", cfg["url"].split("//")[-1]).strip("-"))
-    cfg.setdefault("name", cfg["key"])
-    if args.max_pages:
-        cfg["max_pages"] = args.max_pages
-    if args.only:
-        wanted = set(args.only.split(","))
+    cfg["url"] = site["url"]
+    cfg["key"] = site["key"]
+    cfg.setdefault("name", site["key"])
+    if max_pages:
+        cfg["max_pages"] = int(max_pages)
+    if only:
+        wanted = {c.strip() for c in only.split(",") if c.strip()}
+        unknown = wanted - set(CHECKS)
+        if unknown:
+            sys.exit(f"Неизвестные проверки: {', '.join(unknown)}. Есть: {', '.join(CHECKS)}")
         cfg["checks"] = {k: v for k, v in cfg["checks"].items() if k in wanted}
     for name, opts in cfg["checks"].items():
         if name not in CHECKS:
@@ -75,63 +91,139 @@ def load_config(args):
     return cfg
 
 
-def main():
-    ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
-    ap.add_argument("project", nargs="?", help="папка проекта с project.yml")
-    ap.add_argument("--url", help="адрес сайта (вместо проекта или поверх его url)")
-    ap.add_argument("--max-pages", type=int, help="переопределить max_pages")
-    ap.add_argument("--only", help="через запятую: spelling,typography,links")
-    ap.add_argument("--out", help="папка отчётов, по умолчанию reports/<проект>")
-    args = ap.parse_args()
-    cfg = load_config(args)
-    out_dir = args.out or os.path.join(ROOT, "reports", cfg["key"])
-
+def stage_crawl(cfg, out_dir):
+    """Этап 1: обход сайта. Страницы сохраняются в crawl.json — по нему работают все тесты."""
     started = time.time()
-    failed_pages = []
-    pages = []
+    failed_pages, pages = [], []
     exclude = re.compile(cfg["exclude"]) if cfg.get("exclude") else None
+    print(f"\n=== {cfg['name']}: {cfg['url']}", file=sys.stderr)
     for page in crawler.crawl(cfg["url"], cfg["max_pages"], cfg["delay"], exclude,
                               cfg["ignore_robots"], failed_pages):
         pages.append(page)
         print(f"[{len(pages)}] {page.url}", file=sys.stderr)
+    os.makedirs(os.path.join(out_dir, "tests"), exist_ok=True)
+    for old in os.listdir(os.path.join(out_dir, "tests")):
+        os.remove(os.path.join(out_dir, "tests", old))  # результаты прошлого обхода не смешиваем
+    with open(os.path.join(out_dir, "crawl.json"), "w", encoding="utf-8") as f:
+        json.dump({"started": started, "duration_s": round(time.time() - started),
+                   "failed": failed_pages,
+                   "pages": [{**asdict(p), "ids": sorted(p.ids)} for p in pages]}, f, ensure_ascii=False)
+    print(f"обход: страниц {len(pages)}, не открылось {len(failed_pages)}", file=sys.stderr)
+    if not pages:
+        print("Не открылась ни одна страница — проверь адрес и доступность сайта.", file=sys.stderr)
+        return 2
+    return 0
 
+
+def load_crawl(out_dir):
+    path = os.path.join(out_dir, "crawl.json")
+    if not os.path.exists(path):
+        sys.exit(f"Нет {path}: сначала этап crawl")
+    with open(path, encoding="utf-8") as f:
+        data = json.load(f)
+    data["pages"] = [crawler.Page(p["url"], p["text"], p["links"], set(p["ids"])) for p in data["pages"]]
+    return data
+
+
+def stage_test(cfg, out_dir, name):
+    """Этап 2: один тест (проверка) по сохранённому обходу. Результат — tests/<имя>.json."""
+    started = time.time()
+    crawl = load_crawl(out_dir)
+    module = CHECKS[name]
     env = {
         "start_url": cfg["url"],
-        "failed_pages": failed_pages,
+        "failed_pages": crawl["failed"],
         "dict_dir": os.environ.get("DICT_DIR", os.path.join(COMMON, ".cache", "dict")),
         "common_ignore": os.path.join(COMMON, "dictionaries", "ignore.txt"),
         "stats": {},
     }
-    findings, rules = [], {}
-    for name, opts in cfg["checks"].items():
-        if opts.get("enabled", True) is False:
-            continue
-        module = CHECKS[name]
-        print(f"проверка {name}…", file=sys.stderr)
-        findings += module.run(pages, opts, cfg["severity"], env)
-        for rule, (sev, title) in module.RULES.items():
-            rules[f"{name}.{rule}"] = (cfg["severity"].get(f"{name}.{rule}", sev), title)
+    print(f"тест {name}…", file=sys.stderr)
+    findings = module.run(crawl["pages"], cfg["checks"][name], cfg["severity"], env)
+    rules = {f"{name}.{r}": (cfg["severity"].get(f"{name}.{r}", sev), title)
+             for r, (sev, title) in module.RULES.items()}
+    os.makedirs(os.path.join(out_dir, "tests"), exist_ok=True)
+    with open(os.path.join(out_dir, "tests", f"{name}.json"), "w", encoding="utf-8") as f:
+        json.dump({"findings": [asdict(x) for x in findings], "rules": rules,
+                   "stats": env["stats"], "duration_s": round(time.time() - started)}, f, ensure_ascii=False)
+    counts = Counter(x.severity for x in findings if x.severity != "off")
+    print(f"{name}: " + ", ".join(f"{k} {v}" for k, v in sorted(counts.items())) if counts else f"{name}: чисто",
+          file=sys.stderr)
+    return 1 if any(counts[s] for s in cfg["fail_on"]) else 0
 
+
+def stage_report(cfg, out_dir):
+    """Этап 3: сводный отчёт по сайту из результатов всех тестов."""
+    crawl = load_crawl(out_dir)
+    findings, rules, stats, duration = [], {}, {}, crawl["duration_s"]
+    tests_dir = os.path.join(out_dir, "tests")
+    for fname in sorted(os.listdir(tests_dir)) if os.path.isdir(tests_dir) else []:
+        with open(os.path.join(tests_dir, fname), encoding="utf-8") as f:
+            data = json.load(f)
+        findings += [Finding(**x) for x in data["findings"]]
+        rules.update({k: tuple(v) for k, v in data["rules"].items()})
+        stats.update(data["stats"])
+        duration += data["duration_s"]
     meta = {
         "project": cfg["name"],
         "project_key": cfg["key"],
         "url": cfg["url"],
-        "started_at": dt.datetime.fromtimestamp(started, dt.timezone.utc).strftime("%Y-%m-%d %H:%M UTC"),
-        "duration_s": round(time.time() - started),
-        "pages": len(pages),
-        "pages_failed": len(failed_pages),
+        "started_at": dt.datetime.fromtimestamp(crawl["started"], dt.timezone.utc).strftime("%Y-%m-%d %H:%M UTC"),
+        "duration_s": duration,
+        "pages": len(crawl["pages"]),
+        "pages_failed": len(crawl["failed"]),
         "run_url": os.environ.get("RUN_URL", ""),
-        **env["stats"],
+        **stats,
     }
     summary = report.write_all(out_dir, meta, findings, rules, cfg["fail_on"])
     u = summary["findings_unique"]
-    print(f"\n{cfg['name']}: страниц {len(pages)}, ошибок {u.get('error', 0)}, "
+    print(f"{cfg['name']}: страниц {meta['pages']}, ошибок {u.get('error', 0)}, "
           f"предупреждений {u.get('warning', 0)}, к сведению {u.get('info', 0)} → {out_dir}",
           file=sys.stderr)
-    if not pages:
-        print("Не открылась ни одна страница — проверь адрес и доступность сайта.", file=sys.stderr)
-        sys.exit(2)
-    sys.exit(1 if summary["failed"] else 0)
+    if not crawl["pages"]:
+        return 2
+    return 1 if summary["failed"] else 0
+
+
+def enabled_checks(cfg):
+    return [n for n, o in cfg["checks"].items() if o.get("enabled", True) is not False]
+
+
+def check_site(cfg, out_dir, stage="all"):
+    if stage == "crawl":
+        return stage_crawl(cfg, out_dir)
+    if stage == "test":
+        return max([stage_test(cfg, out_dir, n) for n in enabled_checks(cfg)] or [0])
+    if stage == "report":
+        return stage_report(cfg, out_dir)
+    if stage_crawl(cfg, out_dir) == 0:
+        for name in enabled_checks(cfg):
+            stage_test(cfg, out_dir, name)
+    return stage_report(cfg, out_dir)
+
+
+def main():
+    sites.load_dotenv()
+    ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
+    ap.add_argument("--site", default=os.environ.get("SITE"), help="ключ или адрес (по умолчанию $SITE)")
+    ap.add_argument("--max-pages", type=int, default=os.environ.get("MAX_PAGES") or None,
+                    help="лимит страниц (по умолчанию $MAX_PAGES или из project.yml)")
+    ap.add_argument("--only", default=os.environ.get("CHECKS"), help="spelling,typography,links ($CHECKS)")
+    ap.add_argument("--stage", choices=["all", "crawl", "test", "report"], default="all",
+                    help="all — всё подряд; crawl/test/report — отдельные этапы для пайплайна")
+    ap.add_argument("--list", action="store_true", help="показать сайты и выйти")
+    ap.add_argument("--out", default=os.path.join(ROOT, "reports"), help="корень отчётов")
+    args = ap.parse_args()
+
+    targets = sites.select(args.site)
+    if args.list:
+        for s in targets:
+            print(f"{s['key']}={s['url']}")
+        return
+    if not targets:
+        sys.exit("Нет сайтов: задай SITES или SITE (в окружении или в .env), либо заведи projects/<ключ>/")
+    codes = [check_site(load_config(s, args.max_pages, args.only), os.path.join(args.out, s["key"]), args.stage)
+             for s in targets]
+    sys.exit(max(codes))
 
 
 if __name__ == "__main__":

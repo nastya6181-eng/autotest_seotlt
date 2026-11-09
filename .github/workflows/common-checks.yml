@@ -1,0 +1,247 @@
+# Общие проверки сайтов. Один пайплайн, три этапа:
+#   infra  — самопроверка, зависимости, словари, список сайтов
+#   tests  — чанк на каждый сайт: обход сайта, затем тесты по одному шагу на проверку
+#   logs   — сборщик: логи и отчёты всех чанков, сводка, Checks, issues, история
+name: Common checks
+
+on:
+  schedule:
+    - cron: "0 4 * * 1-5"          # 07:00 МСК, пн–пт
+  workflow_dispatch:
+    inputs:
+      site:
+        description: "Ключ сайта из SITES, любой адрес https://… или all"
+        default: all
+      max_pages:
+        description: "Страниц на сайт (пусто — из project.yml или 200)"
+        default: ""
+      checks:
+        description: "Только эти тесты: spelling,typography,links (пусто — все)"
+        default: ""
+  push:
+    branches: [main]
+    paths:
+      - "common/**"
+      - "projects/**"
+      - "tests/**"
+      - "requirements.txt"
+      - ".github/workflows/common-checks.yml"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: common-checks-${{ github.event_name }}-${{ github.ref }}
+  cancel-in-progress: false
+
+env:
+  PYTHON_VERSION: "3.12"
+  DICT_CACHE_KEY: hunspell-ru-en-v1
+  RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+
+jobs:
+  # ───────────────────────────── этап 1: инфраструктура ─────────────────────────────
+  infra:
+    runs-on: ubuntu-latest
+    outputs:
+      sites: ${{ steps.sites.outputs.sites }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+          cache: pip
+
+      - name: Зависимости
+        run: pip install -r requirements.txt
+
+      - name: Самопроверка правил
+        run: python -m unittest discover -v tests
+
+      - name: Кэш словарей Hunspell
+        id: dict
+        uses: actions/cache@v4
+        with:
+          path: common/.cache/dict
+          key: ${{ env.DICT_CACHE_KEY }}
+
+      - name: Словари Hunspell
+        if: steps.dict.outputs.cache-hit != 'true'
+        run: python -c "import sys; sys.path.insert(0, 'common'); from sitecheck.spelling import ensure_dicts; ensure_dicts('common/.cache/dict')"
+
+      - name: Список сайтов
+        id: sites
+        env:
+          # Переменная репозитория SITES (Settings → Secrets and variables → Actions → Variables):
+          # по строке на сайт, «ключ=https://адрес». Нет её — берутся сайты из projects/.
+          SITES: ${{ vars.SITES }}
+          SITE: ${{ inputs.site || 'all' }}
+        run: |
+          sites=$(python common/list_sites.py)
+          [ "$sites" != "[]" ] || { echo "::error::Нет сайтов: заведи переменную SITES"; exit 1; }
+          echo "$sites" | jq -r '.[] | "\(.key) → \(.url)"'
+          echo "sites=$sites" >> "$GITHUB_OUTPUT"
+
+  # ─────────────────────── этап 2: тесты, по чанку на сайт ───────────────────────
+  tests:
+    needs: infra
+    name: tests (${{ matrix.site.key }})
+    # Сайты могут не открываться с зарубежных IP GitHub. Тогда заведи свой раннер
+    # в РФ и укажи его метку в переменной репозитория RUNNER.
+    runs-on: ${{ vars.RUNNER || 'ubuntu-latest' }}
+    timeout-minutes: 60
+    strategy:
+      fail-fast: false
+      max-parallel: 4
+      matrix:
+        site: ${{ fromJson(needs.infra.outputs.sites) }}
+    env:
+      SITES: ${{ matrix.site.key }}=${{ matrix.site.url }}
+      SITE: ${{ matrix.site.key }}
+      MAX_PAGES: ${{ inputs.max_pages || (github.event_name == 'push' && '20') || '' }}
+      CHECKS: ${{ inputs.checks }}
+      OUT: reports/${{ matrix.site.key }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+          cache: pip
+
+      - run: pip install -r requirements.txt
+
+      - name: Словари из кэша
+        uses: actions/cache/restore@v4
+        with:
+          path: common/.cache/dict
+          key: ${{ env.DICT_CACHE_KEY }}
+
+      - name: Обход сайта
+        id: crawl
+        run: |
+          mkdir -p "$OUT/logs"
+          python common/run_checks.py --stage crawl 2>&1 | tee "$OUT/logs/crawl.log"
+
+      - name: "Тест: ссылки"
+        if: always() && steps.crawl.outcome == 'success' && (env.CHECKS == '' || contains(env.CHECKS, 'links'))
+        run: python common/run_checks.py --stage test --only links 2>&1 | tee "$OUT/logs/links.log"
+
+      - name: "Тест: орфография"
+        if: always() && steps.crawl.outcome == 'success' && (env.CHECKS == '' || contains(env.CHECKS, 'spelling'))
+        run: python common/run_checks.py --stage test --only spelling 2>&1 | tee "$OUT/logs/spelling.log"
+
+      - name: "Тест: типографика"
+        if: always() && steps.crawl.outcome == 'success' && (env.CHECKS == '' || contains(env.CHECKS, 'typography'))
+        run: python common/run_checks.py --stage test --only typography 2>&1 | tee "$OUT/logs/typography.log"
+
+      - name: Отчёт по сайту
+        if: always() && steps.crawl.outcome != 'skipped'
+        run: |
+          python common/run_checks.py --stage report 2>&1 | tee "$OUT/logs/report.log" || true
+          cat "$OUT/summary.md" >> "$GITHUB_STEP_SUMMARY" 2>/dev/null || true
+
+      - name: Результаты чанка
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: report-${{ matrix.site.key }}
+          path: ${{ env.OUT }}
+          retention-days: 90
+
+  # ───────────────────────────── этап 3: сборщик логов ─────────────────────────────
+  logs:
+    needs: [infra, tests]
+    if: always() && needs.infra.result == 'success'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write     # история в ветку metrics
+      checks: write       # результаты тестов во вкладку Checks
+      issues: write       # issue по сайту с ошибками
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Забрать результаты всех чанков
+        uses: actions/download-artifact@v4
+        with:
+          pattern: report-*
+          path: collected
+
+      - name: Общая сводка
+        run: |
+          {
+            echo "## Общие проверки сайтов"
+            echo
+            echo "| сайт | страниц | ошибок | предупреждений | к сведению | итог |"
+            echo "|---|---|---|---|---|---|"
+            for s in collected/report-*/summary.json; do
+              [ -f "$s" ] || continue
+              jq -r '"| [\(.project)](\(.url)) | \(.pages) | \(.findings_unique.error // 0) | \(.findings_unique.warning // 0) | \(.findings_unique.info // 0) | \(if .failed then "❌" else "✅" end) |"' "$s"
+            done
+            for d in collected/report-*/; do
+              [ -f "$d/summary.json" ] || echo "| $(basename "$d" | sed 's/^report-//') | — | — | — | — | ❌ отчёта нет, см. логи |"
+            done
+            echo
+            echo "Логи и отчёты всех сайтов — артефакт **logs-all**."
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Логи и отчёты одним архивом
+        uses: actions/upload-artifact@v4
+        with:
+          name: logs-all
+          path: |
+            collected/**
+            !collected/**/crawl.json
+          retention-days: 90
+
+      - name: Результаты как тесты (вкладка Checks)
+        if: hashFiles('collected/**/junit.xml') != ''
+        uses: mikepenz/action-junit-report@v5
+        with:
+          report_paths: collected/**/junit.xml
+          check_name: Общие проверки сайтов
+          include_passed: true
+          detailed_summary: true
+
+      - name: Issues по сайтам
+        if: github.event_name != 'push'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh label create autotest --color B60205 --description "Падение автотестов" 2>/dev/null || true
+          for s in collected/report-*/summary.json; do
+            [ -f "$s" ] || continue
+            key=$(jq -r .project_key "$s"); name=$(jq -r .project "$s"); failed=$(jq -r .failed "$s")
+            gh label create "site:$key" --color 0E8A16 2>/dev/null || true
+            num=$(gh issue list --label autotest --label "site:$key" --state open --json number -q '.[0].number // empty')
+            { cat "$(dirname "$s")/summary.md"; echo; echo "Прогон: $RUN_URL"; } > body.md
+            if [ "$failed" = true ]; then
+              if [ -n "$num" ]; then gh issue comment "$num" --body-file body.md
+              else gh issue create --title "Автотесты: $name — есть ошибки" --label autotest --label "site:$key" --body-file body.md
+              fi
+            elif [ -n "$num" ]; then
+              gh issue close "$num" --comment "Ошибок больше нет. Прогон: $RUN_URL"
+            fi
+          done
+
+      - name: История в ветку metrics
+        if: github.event_name != 'push'
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898283+github-actions[bot]@users.noreply.github.com"
+          if git ls-remote --exit-code origin metrics >/dev/null; then
+            git fetch --depth=1 origin metrics && git worktree add m origin/metrics && git -C m checkout -B metrics
+          else
+            git worktree add --orphan -b metrics m
+          fi
+          mkdir -p m/history
+          for s in collected/report-*/summary.json; do
+            [ -f "$s" ] || continue
+            f="m/history/$(jq -r .project_key "$s").csv"
+            [ -f "$f" ] || echo "date,run,pages,pages_failed,urls,errors,warnings,info,failed,$(jq -r '.by_rule|keys_unsorted|join(",")' "$s")" > "$f"
+            jq -r --arg run "$GITHUB_RUN_ID" \
+              '[.started_at,$run,.pages,.pages_failed,(.urls_checked//0),(.findings_unique.error//0),(.findings_unique.warning//0),(.findings_unique.info//0),.failed] + [.by_rule[]] | @csv' \
+              "$s" >> "$f"
+          done
+          cd m && git add history && git commit -qm "metrics: run $GITHUB_RUN_ID" && git push -q origin metrics || echo "нечего записывать"
