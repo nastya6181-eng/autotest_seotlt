@@ -9,7 +9,7 @@ cooldown: 330
 exclude: null
 # robots.txt закрывает сайт от ботов; обход согласован с владельцем (задание заказчика)
 ignore_robots: true
-fail_on: [error]
+fail_on: [error, warning]
 checks:
   spelling:
     ignore_file: ignore.txt

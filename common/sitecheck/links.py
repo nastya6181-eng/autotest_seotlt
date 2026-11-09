@@ -115,6 +115,7 @@ def run(pages, cfg, overrides, env):
     finding = make(NAME, RULES, overrides)
     host = urlparse(env["start_url"]).netloc
     external = cfg.get("external", True)
+    skip = re.compile(cfg["ignore"]) if cfg.get("ignore") else None
     out = [finding("page_failed", url, url, message=f"Страница не открылась: {err}")
            for url, err in env["failed_pages"]]
 
@@ -136,7 +137,7 @@ def run(pages, cfg, overrides, env):
                     out.append(finding("missing_anchor", f"{base}#{frag}", page.url, link["text"]))
             if link["tag"] == "a" and not internal and not link.get("blank"):
                 out.append(finding("external_same_tab", url, page.url, link["text"]))
-            if internal or external:
+            if (internal or external) and not (skip and skip.search(base)):
                 uses[base].append((page.url, link["text"] or link["tag"]))
 
     with ThreadPoolExecutor(cfg.get("workers", 3)) as pool:

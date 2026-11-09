@@ -24,7 +24,7 @@
     --stage report            сводный отчёт по сайту из всех тестов
 
 Отчёты: reports/<ключ>/ — report.md, findings.csv, summary.json, summary.md, junit.xml.
-Код выхода: 0 — ошибок нет, 1 — есть замечания уровня из fail_on, 2 — сайт не открылся.
+Код выхода: 0 — дефектов нет, 1 — есть замечания уровня из fail_on (error, warning), 2 — сайт не открылся.
 """
 import argparse
 import datetime as dt
@@ -50,7 +50,7 @@ DEFAULTS = {
     "delay": 0.3,
     "exclude": None,
     "ignore_robots": False,
-    "fail_on": ["error"],
+    "fail_on": ["error", "warning"],
     "severity": {},
     "checks": {"tech": {}, "seo": {}, "links": {}, "spelling": {}, "typography": {}},
 }
