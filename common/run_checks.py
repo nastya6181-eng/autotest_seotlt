@@ -153,9 +153,7 @@ def stage_test(cfg, out_dir, name):
                    "stats": env["stats"], "duration_s": round(time.time() - started)}, f, ensure_ascii=False)
     active = [x for x in findings if x.severity != "off"]
     counts = Counter(x.severity for x in active)
-    print(report.format_text(report.group(active), base=cfg["url"]), file=sys.stderr)
-    print(f"\n{name}: " + ", ".join(f"{k} {v}" for k, v in sorted(counts.items())) if counts else f"{name}: чисто",
-          file=sys.stderr)
+    print(report.format_test_log(name, rules, findings, cfg["fail_on"], base=cfg["url"]), file=sys.stderr)
     return 1 if any(counts[s] for s in cfg["fail_on"]) else 0
 
 

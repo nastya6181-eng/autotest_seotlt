@@ -34,7 +34,16 @@ concurrency:
   group: common-checks-${{ github.event_name }}-${{ github.ref }}
   cancel-in-progress: false
 
+# Явный bash включает pipefail: без него «python … | tee лог» отдаёт код tee (0),
+# и упавший тест оставлял шаг, задание и весь прогон зелёными.
+defaults:
+  run:
+    shell: bash
+
 env:
+  # true — полные адреса страниц в логах, сводке и Checks (для приватного репозитория).
+  # Иначе там пути (/about/), а кликабельные ссылки — в report.html из артефакта.
+  REPORT_FULL_URLS: ${{ vars.REPORT_FULL_URLS || 'false' }}
   PYTHON_VERSION: "3.12"
   DICT_CACHE_KEY: hunspell-ru-en-v1
   RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
@@ -153,17 +162,28 @@ jobs:
 
       - name: Отчёт по сайту
         if: always() && steps.crawl.outcome != 'skipped'
-        run: |
-          python common/run_checks.py --stage report 2>&1 | tee "$OUT/logs/report.log" || true
-          cat "$OUT/summary.md" >> "$GITHUB_STEP_SUMMARY" 2>/dev/null || true
+        run: python common/run_checks.py --stage report 2>&1 | tee "$OUT/logs/report.log" || true
 
       - name: Результаты чанка
+        id: artifact
         if: always()
         uses: actions/upload-artifact@v4
         with:
           name: report-${{ matrix.site.key }}
           path: ${{ env.OUT }}
           retention-days: 90
+
+      - name: Сводка на странице прогона
+        if: always()
+        env:
+          ARTIFACT_URL: ${{ steps.artifact.outputs.artifact-url }}
+        run: |
+          {
+            cat "$OUT/summary.md" 2>/dev/null || echo "### ❌ ${{ matrix.site.key }}: отчёта нет — см. шаги «Обход сайта» и «Тест: …»"
+            echo
+            echo "📄 **Отчёт со ссылками на страницы:** [скачать report-${{ matrix.site.key }}](${ARTIFACT_URL}) → открыть \`report.html\`."
+            echo "Лог каждого теста — шаги «Тест: …» этого задания."
+          } >> "$GITHUB_STEP_SUMMARY"
 
   # ───────────────────────────── этап 3: сборщик логов ─────────────────────────────
   logs:
@@ -193,25 +213,11 @@ jobs:
           pattern: report-*
           path: collected
 
-      - name: Общая сводка
-        run: |
-          {
-            echo "## Общие проверки сайтов"
-            echo
-            echo "| сайт | страниц | ошибок | предупреждений | к сведению | итог |"
-            echo "|---|---|---|---|---|---|"
-            for s in collected/report-*/summary.json; do
-              [ -f "$s" ] || continue
-              jq -r '"| \(.project) | \(.pages) | \(.findings_unique.error // 0) | \(.findings_unique.warning // 0) | \(.findings_unique.info // 0) | \(if .failed then "❌" else "✅" end) |"' "$s"
-            done
-            for d in collected/report-*/; do
-              [ -f "$d/summary.json" ] || echo "| $(basename "$d" | sed 's/^report-//') | — | — | — | — | ❌ отчёта нет, см. логи |"
-            done
-            echo
-            echo "Логи и отчёты всех сайтов — артефакт **logs-all**."
-          } >> "$GITHUB_STEP_SUMMARY"
+      - name: Общий отчёт index.html
+        run: python common/build_index.py collected > index-summary.md
 
       - name: Логи и отчёты одним архивом
+        id: logs_all
         uses: actions/upload-artifact@v4
         with:
           name: logs-all
@@ -219,6 +225,11 @@ jobs:
             collected/**
             !collected/**/crawl.json
           retention-days: 90
+
+      - name: Общая сводка
+        env:
+          ARTIFACT_URL: ${{ steps.logs_all.outputs.artifact-url }}
+        run: python common/build_index.py collected "$ARTIFACT_URL" >> "$GITHUB_STEP_SUMMARY"
 
       - name: Результаты как тесты (вкладка Checks)
         if: hashFiles('collected/**/junit.xml') != ''

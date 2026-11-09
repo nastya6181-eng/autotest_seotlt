@@ -22,6 +22,8 @@ os.environ.update({k: v for k, v in secrets.items() if sites.SITE_VAR.fullmatch(
 secret_of = {sites.key_of(k): k for k in os.environ if sites.SITE_VAR.fullmatch(k)}
 
 if "--mask" in sys.argv:
+    if os.environ.get("REPORT_FULL_URLS", "").lower() in ("1", "true", "yes"):
+        sys.exit(0)  # полные адреса включены сознательно (приватный репозиторий) — не прячем
     for s in sites.all_sites():
         for value in {s["url"], s["url"].rstrip("/"), sites.host(s["url"])}:
             print(f"::add-mask::{value}")
