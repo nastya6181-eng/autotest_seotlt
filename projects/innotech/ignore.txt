@@ -72,6 +72,7 @@ menarini
 homenet
 metra
 рик
+Авангардия
 
 # фамилии
 галкин*
