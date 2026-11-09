@@ -31,14 +31,18 @@ class Page:
     text: str
     links: list = field(default_factory=list)
     ids: set = field(default_factory=set)
+    meta: dict = field(default_factory=dict)
 
 
 class PageParser(HTMLParser):
     def __init__(self):
         super().__init__(convert_charrefs=True)
         self.chunks, self.links, self.ids = [], [], set()
+        self.meta = {"title": "", "description": None, "robots": "", "canonical": "", "lang": "",
+                     "h1": 0, "img_no_alt": []}
         self._skip = 0
         self._a = None
+        self._in_title = False
 
     def handle_starttag(self, tag, attrs):
         a = dict(attrs)
@@ -47,6 +51,7 @@ class PageParser(HTMLParser):
                 self.ids.add(a[key])
         if tag in SKIP_TAGS:
             self._skip += 1
+        self._collect_meta(tag, a)
         if tag in {"br", "hr", "img", "input"}:
             self.chunks.append("\n")
         if tag == "a" and "href" in a:
@@ -64,7 +69,28 @@ class PageParser(HTMLParser):
             if a.get(k):
                 self.chunks.append("\n" + a[k] + "\n")
 
+    def _collect_meta(self, tag, a):
+        m = self.meta
+        if tag == "html":
+            m["lang"] = a.get("lang") or ""
+        elif tag == "title" and not self._skip:
+            self._in_title = True
+        elif tag == "h1":
+            m["h1"] += 1
+        elif tag == "meta":
+            name = (a.get("name") or "").lower()
+            if name == "description":
+                m["description"] = (a.get("content") or "").strip()
+            elif name == "robots":
+                m["robots"] = (a.get("content") or "").lower()
+        elif tag == "link" and "canonical" in (a.get("rel") or "").lower().split():
+            m["canonical"] = a.get("href") or ""
+        elif tag == "img" and a.get("src") and a.get("alt") is None:
+            m["img_no_alt"].append(a["src"])
+
     def handle_endtag(self, tag):
+        if tag == "title":
+            self._in_title = False
         if tag in SKIP_TAGS and self._skip:
             self._skip -= 1
         if tag == "a":
@@ -73,6 +99,8 @@ class PageParser(HTMLParser):
             self.chunks.append("\n")
 
     def handle_data(self, data):
+        if self._in_title:
+            self.meta["title"] = (self.meta["title"] + data).strip()
         if self._a is not None:
             self._a["text"] = (self._a["text"] + " " + data.strip()).strip()[:80]
         if not self._skip:
@@ -97,9 +125,9 @@ def fetch_page(url, retries=3):
         try:
             with opener.open(req, timeout=20) as r:
                 if "text/html" not in r.headers.get("Content-Type", ""):
-                    return None, r.geturl()
+                    return None, r.geturl(), r.headers
                 charset = r.headers.get_content_charset() or "utf-8"
-                return r.read().decode(charset, "replace"), r.geturl()
+                return r.read().decode(charset, "replace"), r.geturl(), r.headers
         except HTTPError as e:
             if e.code not in RETRY_STATUSES or attempt == retries:
                 raise
@@ -126,24 +154,26 @@ def crawl(start, max_pages, delay=0.3, exclude=None, ignore_robots=False, failed
                 delay = max(delay, float(robots.crawl_delay(UA)))
         except Exception:
             robots = None
-    queue, seen = deque([start]), {start}
+    queue, seen, done = deque([start]), {start}, set()
     while queue and max_pages > 0:
         url = queue.popleft()
         if robots and not robots.can_fetch(UA, url):
             continue
         try:
-            html, final = fetch_page(url)
+            html, final, headers = fetch_page(url)
         except Exception as e:
             if failed is not None:
                 failed.append((url, str(getattr(e, "code", None) or e)))
             print(f"  ! не открылась {url}: {e}", file=sys.stderr)
             continue
-        if html is None or not same_site(urlparse(final).netloc, host):
-            continue
+        if html is None or not same_site(urlparse(final).netloc, host) or final in done:
+            continue  # не HTML, ушли на чужой сайт или редирект на уже пройденную страницу
+        done.add(final)
         p = PageParser()
         p.feed(html)
         max_pages -= 1
-        yield Page(final, p.text(), p.links, p.ids)
+        p.meta["x_robots"] = (headers.get("X-Robots-Tag") or "").lower()
+        yield Page(final, p.text(), p.links, p.ids, p.meta)
         for link in p.links:
             if link["tag"] != "a":
                 continue

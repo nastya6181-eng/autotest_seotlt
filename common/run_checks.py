@@ -7,7 +7,7 @@
     SITE        прогнать только один: ключ из SITES или любой адрес
     MAX_PAGES   переопределить лимит страниц
     MAX_RPS     не чаще N запросов в секунду к сайту (поверх max_rps из project.yml)
-    CHECKS      только эти проверки: spelling,typography,links
+    CHECKS      только эти проверки: tech,seo,links,spelling,typography
 
 Примеры:
     python common/run_checks.py                                  # все сайты из SITES
@@ -39,12 +39,12 @@ from dataclasses import asdict
 import yaml
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
-from sitecheck import crawler, links, report, sites, spelling, throttle, typography  # noqa: E402
+from sitecheck import crawler, links, report, seo, sites, spelling, tech, throttle, typography  # noqa: E402
 from sitecheck.findings import SEVERITIES, Finding  # noqa: E402
 
 ROOT = sites.ROOT
 COMMON = os.path.join(ROOT, "common")
-CHECKS = {m.NAME: m for m in (spelling, typography, links)}
+CHECKS = {m.NAME: m for m in (tech, seo, links, spelling, typography)}
 DEFAULTS = {
     "max_pages": 200,
     "delay": 0.3,
@@ -52,7 +52,7 @@ DEFAULTS = {
     "ignore_robots": False,
     "fail_on": ["error"],
     "severity": {},
-    "checks": {"spelling": {}, "typography": {}, "links": {}},
+    "checks": {"tech": {}, "seo": {}, "links": {}, "spelling": {}, "typography": {}},
 }
 
 
@@ -122,7 +122,8 @@ def load_crawl(out_dir):
         sys.exit(f"Нет {path}: сначала этап crawl")
     with open(path, encoding="utf-8") as f:
         data = json.load(f)
-    data["pages"] = [crawler.Page(p["url"], p["text"], p["links"], set(p["ids"])) for p in data["pages"]]
+    data["pages"] = [crawler.Page(p["url"], p["text"], p["links"], set(p["ids"]), p.get("meta", {}))
+                     for p in data["pages"]]
     return data
 
 
