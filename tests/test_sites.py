@@ -11,17 +11,16 @@ from sitecheck import sites  # noqa: E402
 class SitesTest(unittest.TestCase):
     def test_parse(self):
         got = sites.parse_sites("shop=https://shop.ru/ max_rps=0.8 ignore_robots=true\n"
-                                "  # комментарий\n\nhttps://blog.example.com/news\nlanding.ru")
+                                "  # комментарий\n\nblog=landing.ru")
         self.assertEqual(got, [
             {"key": "shop", "url": "https://shop.ru/", "options": {"max_rps": 0.8, "ignore_robots": True}},
-            {"key": "blog-example-com-news", "url": "https://blog.example.com/news", "options": {}},
-            {"key": "landing-ru", "url": "https://landing.ru", "options": {}},
+            {"key": "blog", "url": "https://landing.ru", "options": {}},
         ])
 
     def test_bad_input(self):
         for raw in ("shop=https://shop.ru/ speed=fast", "shop=https://shop.ru/ max_pages=abc",
                     "shop=https://shop.ru/ max_rps=", "a=https://a.ru/\na=https://b.ru/",
-                    "all=https://a.ru/"):
+                    "all=https://a.ru/", "https://no-key.ru/"):
             with self.assertRaises(SystemExit, msg=raw):
                 sites.parse_sites(raw)
 

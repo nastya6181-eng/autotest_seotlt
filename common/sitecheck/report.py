@@ -102,7 +102,7 @@ def scrub(text, base):
     host = urlsplit(base).netloc.lower().removeprefix("www.") if base else ""
     if host:
         text = re.sub(rf"(?i)(https?://)?(www\.)?{re.escape(host)}", "", text).strip()
-    return text
+    return text.replace("::", ": :")
 
 
 def format_text(groups, limit=15, base=""):

@@ -61,12 +61,16 @@ def parse_line(line):
             options[name] = OPTIONS[name](value)
         except ValueError:
             raise SystemExit(f"Опция «{opt}» у сайта {key or url}: неверное значение") from None
-    return {"key": key or key_from_url(url), "url": url, "options": options}
+    return {"key": key or key_from_url(url), "url": url, "options": options, "keyed": bool(key)}
 
 
 def parse_sites(raw):
     lines = (l.split("#", 1)[0].strip() for l in (raw or "").splitlines())
     sites = [parse_line(l) for l in lines if l]
+    unkeyed = [s["url"] for s in sites if not s.pop("keyed")]
+    if unkeyed:
+        raise SystemExit(f"В SITES у {len(unkeyed)} сайт(ов) нет ключа: пиши «ключ=адрес». Ключ из домена "
+                         "раскрыл бы адрес в матрице и логах")
     keys = [s["key"] for s in sites]
     if "all" in keys:
         raise SystemExit("Ключ «all» занят: SITE=all значит «все сайты». Переименуй сайт в SITES")
@@ -90,5 +94,7 @@ def select(site=None):
     if found:
         return found
     if "." in site:
-        return [{**parse_line(site), "adhoc": site}]
+        line = parse_line(site)
+        line.pop("keyed")
+        return [{**line, "adhoc": site}]
     raise SystemExit(f"Сайта «{site}» нет в SITES")
