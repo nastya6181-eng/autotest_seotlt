@@ -174,7 +174,8 @@ def crawl(start, max_pages, delay=0.3, exclude=None, ignore_robots=False, failed
                   else "duplicate" if final in done else "")
         if reason:
             if skipped is not None:
-                skipped.setdefault(reason, []).append(f"{url} → {final}" if final != url else url)
+                where = urlparse(final).netloc  # только домен: в адресе назначения бывают токены
+                skipped.setdefault(reason, []).append(f"{url} → {where}" if final != url else url)
             continue
         done.add(final)
         p = PageParser()
