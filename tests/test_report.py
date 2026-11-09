@@ -41,12 +41,20 @@ class ReportTest(unittest.TestCase):
             finally:
                 os.chdir(cwd)
             self.assertEqual(sorted(os.listdir(out)),
-                             ["findings.csv", "junit.xml", "report.html", "report.md", "summary.json", "summary.md"])
-            page = open(os.path.join(out, "report.html"), encoding="utf-8").read()
+                             ["findings.csv", "junit.xml", "report.md", "summary.json", "summary.md"])
+            page = open(os.path.join(out, "summary.md"), encoding="utf-8").read()
         self.assertEqual(code_digest(), before, "отчёт перезаписал файл кода")
-        self.assertIn("href='https://site.ru/b/'", page)
-        self.assertIn("<mark>пн - пт</mark>", page)
-        self.assertIn("Как исправить", page)
+        self.assertIn("| /b/ | пн - пт | часы пн - пт |", page)
+        self.assertIn("| /a/ | — |", page)
+        self.assertIn("**Как исправить:**", page)
+        self.assertIn("Правило в коде: `common/sitecheck/seo.py:", page)
+
+    def test_full_urls_are_clickable(self):
+        from unittest import mock
+        with tempfile.TemporaryDirectory() as out, mock.patch.dict(os.environ, {"REPORT_FULL_URLS": "true"}):
+            report.write_all(out, META, FINDINGS, RULES, ["error", "warning"])
+            page = open(os.path.join(out, "summary.md"), encoding="utf-8").read()
+        self.assertIn("[/b/](https://site.ru/b/)", page)
 
     def test_test_log_marks_rules(self):
         log = report.format_test_log("seo", {"seo.missing_h1": RULES["seo.missing_h1"],

@@ -1,10 +1,10 @@
-"""Лог теста и отчёты прогона: report.html, report.md, summary.md, findings.csv, summary.json, junit.xml.
+"""Лог теста и отчёт прогона. Полный отчёт — на странице прогона (summary.md) и в логе каждого теста;
+в артефакт идут findings.csv, report.md, summary.json и junit.xml.
 
-REPORT_FULL_URLS=true — показывать полные адреса страниц в логах, сводке и Checks (для приватного
-репозитория). По умолчанию там только пути (/about/), а полные кликабельные ссылки — в report.html.
+REPORT_FULL_URLS=true — полные кликабельные адреса страниц (для приватного репозитория).
+По умолчанию — пути (/about/), без домена.
 """
 import csv
-import html
 import json
 import os
 import re
@@ -63,6 +63,8 @@ def build_summary(meta, findings, rules, fail_on):
         "findings_total": dict(by_sev),
         "findings_unique": dict(uniq),
         "by_rule": {r: counts.get(r, 0) for r in rules},
+        "rules_total": sum(1 for sev, _ in rules.values() if sev != "off"),
+        "rules_failed": sum(1 for r, (sev, _) in rules.items() if counts.get(r) and sev in fail_on),
     }
 
 
@@ -100,7 +102,7 @@ def show_fragment(fragment, base):
 
 # ─────────────────────────────── лог теста ───────────────────────────────
 
-def format_test_log(name, rules, findings, fail_on, base="", limit=15):
+def format_test_log(name, rules, findings, fail_on, base="", limit=100):
     """Лог одного теста в стиле тест-раннера: правила ✔/✘, затем подробности по каждому правилу
     с замечаниями. В GitHub Actions подробности сворачиваются в группы, упавшие правила — аннотации."""
     gh = in_actions()
@@ -153,7 +155,7 @@ def format_test_log(name, rules, findings, fail_on, base="", limit=15):
                 lines.append(f"       контекст: …{scrub(f.context, base)[:140]}…")
         rest = sum(len(g["pages"]) if not g["f"].fragment or g["f"].fragment == g["f"].page else 1 for g in rows) - shown
         if rest > 0:
-            lines.append(f"   … и ещё {rest} — все в report.html / findings.csv")
+            lines.append(f"   … и ещё {rest} — все в findings.csv (артефакт прогона)")
         if gh:
             lines.append("::endgroup::")
             if rule_id in failed:
@@ -190,115 +192,61 @@ def write_markdown(path, summary, groups):
             f.write("\n")
 
 
-HTML_CSS = """
-:root{--bg:#fff;--fg:#1f2328;--mute:#656d76;--line:#d0d7de;--card:#f6f8fa;--err:#cf222e;--warn:#bc4c00;--ok:#1a7f37;--mark:#fff8c5;--link:#0969da}
-@media (prefers-color-scheme:dark){:root{--bg:#0d1117;--fg:#e6edf3;--mute:#8d96a0;--line:#30363d;--card:#161b22;--err:#f85149;--warn:#db6d28;--ok:#2ea043;--mark:#4b3d00;--link:#4493f8}}
-body{font:15px/1.5 -apple-system,Segoe UI,Roboto,sans-serif;background:var(--bg);color:var(--fg);margin:0 auto;padding:24px 16px;max-width:1200px}
-h1{font-size:24px;margin:0 0 4px}h2{font-size:18px;margin:32px 0 8px}a{color:var(--link)}
-.meta{color:var(--mute);margin-bottom:16px}.badge{display:inline-block;padding:2px 8px;border-radius:12px;font-size:13px;font-weight:600}
-.error{background:var(--err);color:#fff}.warning{background:var(--warn);color:#fff}.info{background:var(--line);color:var(--fg)}.pass{background:var(--ok);color:#fff}
-.wrap{overflow-x:auto}table{border-collapse:collapse;width:100%;margin:8px 0;font-size:14px}
-th,td{border:1px solid var(--line);padding:6px 8px;text-align:left;vertical-align:top;overflow-wrap:anywhere}
-th{background:var(--card)}td.n{text-align:right;white-space:nowrap}.hint{background:var(--card);border-left:4px solid var(--warn);padding:8px 12px;margin:8px 0}
-mark{background:var(--mark);color:inherit;padding:0 2px}details summary{cursor:pointer;color:var(--mute)}code{font-size:13px}.src{color:var(--mute);font-size:13px}
-"""
+def link(url, base):
+    """Страница в сводке: кликабельная ссылка при полных адресах, иначе путь."""
+    shown = cell(show(url, base))
+    return f"[{cell(relative(url, base))}]({url})" if full_urls() and url.startswith("http") else shown
 
 
-def _h(s):
-    return html.escape(str(s or ""))
-
-
-def _context_html(ctx, fragment):
-    c, frag = _h(ctx), _h(fragment)
-    return c.replace(frag, f"<mark>{frag}</mark>", 1) if frag and frag in c else c
-
-
-def _link(url, base):
-    return f"<a href='{_h(url)}' target='_blank' rel='noopener'>{_h(relative(url, base))}</a>"
-
-
-def write_html(path, summary, groups, rules):
-    """Отчёт для человека: что сломано, на какой странице (ссылка), фрагмент, контекст, как исправить."""
+def write_step_summary(path, summary, rules, groups=(), limit=200):
+    """Полный отчёт на странице прогона: правила, и по каждому упавшему — как исправить,
+    страницы, фрагмент, контекст. Отдельного файла-отчёта нет: всё здесь и в логе теста."""
+    u = summary["findings_unique"]
+    base = summary["url"]
     rows_of = dict(by_rule(groups))
-    u = summary["findings_unique"]
-    base = summary["url"]
-    status = ("<span class='badge error'>есть дефекты</span>" if summary["failed"]
-              else "<span class='badge pass'>дефектов нет</span>")
-    out = [f"<!doctype html><html lang='ru'><head><meta charset='utf-8'>"
-           f"<meta name='viewport' content='width=device-width,initial-scale=1'>"
-           f"<title>Отчёт: {_h(summary['project'])}</title><style>{HTML_CSS}</style></head><body>",
-           f"<h1>{_h(summary['project'])} {status}</h1>",
-           f"<div class='meta'><a href='{_h(base)}'>{_h(base)}</a> · {_h(summary['started_at'])} · "
-           f"страниц {summary['pages']} · адресов {summary.get('urls_checked', 0)} · "
-           f"критично {u.get('error', 0)} · дефектов {u.get('warning', 0)} · рекомендаций {u.get('info', 0)}"
-           + (f" · <a href='{_h(summary['run_url'])}'>прогон в GitHub</a>" if summary.get("run_url") else "")
-           + "</div>",
-           "<h2>Правила</h2><div class='wrap'><table><tr><th>правило</th><th>уровень</th><th>результат</th></tr>"]
-    for rule_id, (sev, title) in sorted(rules.items(), key=lambda kv: (-len(rows_of.get(kv[0], [])), kv[0])):
-        rows = rows_of.get(rule_id, [])
-        res = ("выключено" if sev == "off" else f"<a href='#{rule_id}'>{len(rows)} замечаний</a>" if rows
-               else "<span class='badge pass'>ок</span>")
-        out.append(f"<tr><td>{_h(title)}<br><code>{rule_id}</code></td>"
-                   f"<td><span class='badge {sev if sev != 'off' else 'info'}'>{SEV_TITLE.get(sev, sev)}</span></td>"
-                   f"<td>{res}</td></tr>")
-    out.append("</table></div>")
-    for rule_id, rows in rows_of.items():
-        sev, title = rules[rule_id]
-        src, line = source(rule_id)
-        out.append(f"<h2 id='{rule_id}'><span class='badge {sev}'>{SEV_TITLE[sev]}</span> {_h(title)} — {len(rows)}</h2>"
-                   f"<div class='hint'><b>Как исправить:</b> {_h(hint(rule_id))}</div>"
-                   f"<div class='src'>Правило <code>{rule_id}</code>, код <code>{src}:{line}</code></div>"
-                   "<div class='wrap'><table><tr><th>страница</th><th>что</th><th>контекст</th><th>страниц</th></tr>")
-        for g in rows:
-            f, pages = g["f"], g["pages"]
-            more = ""
-            if len(pages) > 1:
-                more = (f"<details><summary>ещё {len(pages) - 1}</summary>"
-                        + "<br>".join(_link(p, base) for p in pages[1:]) + "</details>")
-            if f.fragment.startswith(("http://", "https://")):
-                what = _link(f.fragment, base)
-            else:
-                what = _h(f.fragment) if f.fragment and f.fragment != f.page else "—"
-            why = f"<br><span class='src'>{_h(f.message)}</span>" if f.message != title else ""
-            out.append(f"<tr><td>{_link(pages[0], base)}{more}</td><td>{what}{why}</td>"
-                       f"<td>{_context_html(f.context, f.fragment)}</td><td class='n'>{len(pages)}</td></tr>")
-        out.append("</table></div>")
-    out.append("</body></html>")
-    with open(path, "w", encoding="utf-8") as fh:
-        fh.write("\n".join(out))
-
-
-def write_step_summary(path, summary, rules, groups=()):
-    """Сводка для страницы прогона в GitHub Actions: правила и что где чинить."""
-    u = summary["findings_unique"]
-    base = summary["url"]
+    failed_rules = [r for r in rows_of if rules[r][0] in summary["fail_on"]]
+    passed = [r for r, (sev, _) in rules.items() if sev != "off" and r not in rows_of]
     icon = "❌" if summary["failed"] else "✅"
-    rows_of = dict(by_rule(groups))
     with open(path, "w", encoding="utf-8") as f:
-        f.write(f"### {icon} {summary['project']}\n\n"
+        f.write(f"## {icon} {summary['project']}\n\n"
                 f"Страниц: {summary['pages']} · адресов: {summary.get('urls_checked', 0)} · "
+                f"правил упало: {len(failed_rules)} из {len(rules)} · "
                 f"критично: {u.get('error', 0)} · дефектов: {u.get('warning', 0)} · "
                 f"рекомендаций: {u.get('info', 0)} · {summary['duration_s']} с\n\n"
-                "| | правило | уровень | замечаний |\n|---|---|---|---|\n")
-        for rule, n in sorted(summary["by_rule"].items(), key=lambda kv: -kv[1]):
-            if n:
-                sev = rules[rule][0]
-                mark = "✘" if sev in summary["fail_on"] else "•"
-                f.write(f"| {mark} | {rules[rule][1]} (`{rule}`) | {SEV_TITLE.get(sev, sev)} | "
-                        f"{len(rows_of.get(rule, []))} |\n")
-        f.write("\n#### Что и где чинить\n\n")
+                "| | правило | уровень | замечаний | страниц |\n|---|---|---|---|---|\n")
         for rule_id, rows in rows_of.items():
-            f.write(f"<details><summary>{SEV_ICON[rows[0]['f'].severity]} <b>{escape(rules[rule_id][1])}</b> "
-                    f"— {len(rows)} <code>{rule_id}</code></summary>\n\n"
-                    f"**Как исправить:** {cell(hint(rule_id))}\n\n"
-                    "| где | что | контекст |\n|---|---|---|\n")
-            for g in rows[:20]:
+            sev = rules[rule_id][0]
+            mark = "✘" if sev in summary["fail_on"] else "•"
+            pages = len({p for g in rows for p in g["pages"]})
+            f.write(f"| {mark} | {cell(rules[rule_id][1])} `{rule_id}` | "
+                    f"{SEV_TITLE.get(sev, sev)} | {sum(len(g['pages']) for g in rows)} | {pages} |\n")
+        if passed:
+            f.write(f"\n✔ Прошли ({len(passed)}): " + ", ".join(f"`{r}`" for r in passed) + "\n")
+        for rule_id, rows in rows_of.items():
+            sev, title = rules[rule_id]
+            src, line = source(rule_id)
+            f.write(f"\n<details><summary>{SEV_ICON[sev]} <b>{escape(title)}</b> — "
+                    f"{sum(len(g['pages']) for g in rows)} <code>{rule_id}</code></summary>\n\n"
+                    f"**Как исправить:** {cell(hint(rule_id))}  \n"
+                    f"Правило в коде: `{src}:{line}`\n\n"
+                    "| страница | что | контекст |\n|---|---|---|\n")
+            n = 0
+            for g in rows:
                 y, pages = g["f"], g["pages"]
-                what = cell(show_fragment(y.fragment, base))[:100] if y.fragment and y.fragment != y.page else "—"
-                where = cell(show(pages[0], base)) + (f" (+ ещё {len(pages) - 1})" if len(pages) > 1 else "")
-                f.write(f"| {where} | {what} | {cell(scrub(y.context, base))[:140]} |\n")
-            if len(rows) > 20:
-                f.write(f"\nЕщё {len(rows) - 20} — в report.html.\n")
+                what = cell(show_fragment(y.fragment, base))[:120] if y.fragment and y.fragment != y.page else "—"
+                if y.message != title:
+                    what += f"<br><sub>{cell(scrub(y.message, base))[:120]}</sub>"
+                ctx = cell(scrub(y.context, base))[:160]
+                for p in pages if what == "—" else pages[:1]:
+                    if n >= limit:
+                        break
+                    more = f" <sub>и ещё {len(pages) - 1} стр.: " + ", ".join(link(x, base) for x in pages[1:10]) \
+                        + (" …" if len(pages) > 10 else "") + "</sub>" if what != "—" and len(pages) > 1 else ""
+                    f.write(f"| {link(p, base)}{more} | {what} | {ctx} |\n")
+                    n += 1
+            total = sum(len(g["pages"]) if not g["f"].fragment or g["f"].fragment == g["f"].page else 1 for g in rows)
+            if total > n:
+                f.write(f"\nЕщё {total - n} — в артефакте прогона, файл findings.csv.\n")
             f.write("\n</details>\n")
 
 
@@ -345,7 +293,6 @@ def write_all(out_dir, meta, findings, rules, fail_on):
     summary = build_summary(meta, findings, rules, fail_on)
     write_csv(os.path.join(out_dir, "findings.csv"), active)
     write_markdown(os.path.join(out_dir, "report.md"), summary, groups)
-    write_html(os.path.join(out_dir, "report.html"), summary, groups, rules)
     write_step_summary(os.path.join(out_dir, "summary.md"), summary, rules, groups)
     write_junit(os.path.join(out_dir, "junit.xml"), summary, groups, rules)
     with open(os.path.join(out_dir, "summary.json"), "w", encoding="utf-8") as f:

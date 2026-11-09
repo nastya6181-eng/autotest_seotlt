@@ -181,8 +181,7 @@ jobs:
           {
             cat "$OUT/summary.md" 2>/dev/null || echo "### ❌ ${{ matrix.site.key }}: отчёта нет — см. шаги «Обход сайта» и «Тест: …»"
             echo
-            echo "📄 **Отчёт со ссылками на страницы:** [скачать report-${{ matrix.site.key }}](${ARTIFACT_URL}) → открыть \`report.html\`."
-            echo "Лог каждого теста — шаги «Тест: …» этого задания."
+            echo "Лог каждого теста — шаги «Тест: …» этого задания. Все замечания одним файлом: [findings.csv в артефакте report-${{ matrix.site.key }}](${ARTIFACT_URL})."
           } >> "$GITHUB_STEP_SUMMARY"
 
   # ───────────────────────────── этап 3: сборщик логов ─────────────────────────────
@@ -213,11 +212,7 @@ jobs:
           pattern: report-*
           path: collected
 
-      - name: Общий отчёт index.html
-        run: python common/build_index.py collected > index-summary.md
-
       - name: Логи и отчёты одним архивом
-        id: logs_all
         uses: actions/upload-artifact@v4
         with:
           name: logs-all
@@ -227,9 +222,7 @@ jobs:
           retention-days: 90
 
       - name: Общая сводка
-        env:
-          ARTIFACT_URL: ${{ steps.logs_all.outputs.artifact-url }}
-        run: python common/build_index.py collected "$ARTIFACT_URL" >> "$GITHUB_STEP_SUMMARY"
+        run: python common/build_index.py collected >> "$GITHUB_STEP_SUMMARY"
 
       - name: Результаты как тесты (вкладка Checks)
         if: hashFiles('collected/**/junit.xml') != ''
