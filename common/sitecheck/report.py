@@ -187,17 +187,20 @@ def write_markdown(path, summary, groups):
         for rule_id, rows in by_rule(groups):
             x = rows[0]["f"]
             f.write(f"## {SEV_ICON[x.severity]} {rule_id} — {len(rows)}\n\n{hint(rule_id)}\n\n"
-                    "| фрагмент | страниц | пример | контекст |\n|---|---|---|---|\n")
+                    "| фрагмент | почему | страниц | пример | контекст |\n|---|---|---|---|---|\n")
             for g in rows[:MAX_ROWS]:
                 y = g["f"]
-                f.write(f"| `{cell(y.fragment)[:120]}` | {len(g['pages'])} | {g['pages'][0]} | {cell(y.context)[:160]} |\n")
+                f.write(f"| `{cell(y.fragment)[:120]}` | {cell(y.message)[:160]} | {len(g['pages'])} | "
+                        f"{g['pages'][0]} | {cell(y.context)[:160]} |\n")
             f.write("\n")
 
 
 def link(url, base):
     """Страница в сводке: кликабельная ссылка при полных адресах, иначе путь."""
-    shown = cell(show(url, base))
-    return f"[{cell(relative(url, base))}]({url})" if full_urls() and url.startswith("http") else shown
+    shown = cell(show(url, base))[:150]
+    if full_urls() and url.startswith("http") and len(url) <= 2000:
+        return f"[{cell(relative(url, base))[:150]}]({url})"
+    return shown
 
 
 MAX_SUMMARY_BYTES = 900_000  # GitHub не показывает сводку шага больше 1 МиБ
@@ -209,6 +212,9 @@ def write_step_summary(path, summary, rules, groups=()):
         text = summary_text(summary, rules, groups, limit)
         if len(text.encode("utf-8")) <= MAX_SUMMARY_BYTES:
             break
+    else:
+        text = text.encode("utf-8")[:MAX_SUMMARY_BYTES].decode("utf-8", "ignore") \
+            + "\n\n…отчёт обрезан по лимиту GitHub, полностью — findings.csv в артефакте прогона.\n"
     with open(path, "w", encoding="utf-8") as f:
         f.write(text)
 
