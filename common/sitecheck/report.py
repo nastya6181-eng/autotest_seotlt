@@ -235,14 +235,16 @@ def summary_text(summary, rules, groups, limit):
                 f"правил упало: {len(failed_rules)} из {len(rules)} · "
                 f"критично: {u.get('error', 0)} · дефектов: {u.get('warning', 0)} · "
                 f"рекомендаций: {u.get('info', 0)} · {summary['duration_s']} с\n\n"
-                "| | правило | уровень | замечаний | страниц |\n|---|---|---|---|---|\n")
+                + ("| | правило | уровень | замечаний | страниц |\n|---|---|---|---|---|\n" if rows_of else ""))
         for rule_id, rows in rows_of.items():
             sev = rules[rule_id][0]
             mark = "✘" if sev in summary["fail_on"] else "•"
             pages = len({p for g in rows for p in g["pages"]})
             f.write(f"| {mark} | {cell(rules[rule_id][1])} `{rule_id}` | "
                     f"{SEV_TITLE.get(sev, sev)} | {sum(len(g['pages']) for g in rows)} | {pages} |\n")
-        if passed:
+        if summary.get("crawl_problem"):
+            f.write(f"\n> ⛔ **Сайт не обошли, тесты не запускались.** {cell(summary['crawl_problem'])}\n")
+        if passed and summary["pages"]:
             f.write(f"\n✔ Прошли ({len(passed)}): " + ", ".join(f"`{r}`" for r in passed) + "\n")
         for rule_id, rows in rows_of.items():
             sev, title = rules[rule_id]

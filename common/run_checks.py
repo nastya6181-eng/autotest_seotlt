@@ -102,8 +102,11 @@ def stage_crawl(cfg, out_dir):
     failed_pages, pages = [], []
     exclude = re.compile(cfg["exclude"]) if cfg.get("exclude") else None
     print(f"\n=== {cfg['name']}: {cfg['url']}", file=sys.stderr)
+    skipped = {}
+    print(f"robots.txt: {'не соблюдаем (ignore_robots=true)' if cfg['ignore_robots'] else 'соблюдаем'} · "
+          f"лимит {cfg['max_pages']} стр. · темп {cfg.get('max_rps') or 'без ограничения'} запр./с", file=sys.stderr)
     for page in crawler.crawl(cfg["url"], cfg["max_pages"], cfg["delay"], exclude,
-                              cfg["ignore_robots"], failed_pages):
+                              cfg["ignore_robots"], failed_pages, skipped):
         pages.append(page)
         print(f"[{len(pages)}] {page.url}", file=sys.stderr)
     os.makedirs(os.path.join(out_dir, "tests"), exist_ok=True)
@@ -111,13 +114,45 @@ def stage_crawl(cfg, out_dir):
         os.remove(os.path.join(out_dir, "tests", old))  # результаты прошлого обхода не смешиваем
     with open(os.path.join(out_dir, "crawl.json"), "w", encoding="utf-8") as f:
         json.dump({"started": started, "duration_s": round(time.time() - started),
-                   "failed": failed_pages,
+                   "failed": failed_pages, "skipped": {k: len(v) for k, v in skipped.items()},
                    "pages": [{**asdict(p), "ids": sorted(p.ids)} for p in pages]}, f, ensure_ascii=False)
-    print(f"обход: страниц {len(pages)}, не открылось {len(failed_pages)}", file=sys.stderr)
+    print(f"обход: страниц {len(pages)}, не открылось {len(failed_pages)}"
+          + "".join(f", {SKIP_REASONS[k][0]}: {len(v)}" for k, v in skipped.items() if k != "duplicate"),
+          file=sys.stderr)
+    for url, err in failed_pages[:10]:
+        print(f"  не открылась: {report.scrub(url, '')} — {err}", file=sys.stderr)
     if not pages:
-        print("Не открылась ни одна страница — проверь адрес и доступность сайта.", file=sys.stderr)
+        print("\nНи одной страницы не обошли. Причина:", file=sys.stderr)
+        if not skipped and failed_pages:
+            print("  сайт не отвечает или отвечает ошибкой (см. выше). Если сайт открывается в браузере, "
+                  "а отсюда нет — он режет зарубежные или датацентровые IP: нужен свой раннер (переменная RUNNER).",
+                  file=sys.stderr)
+        for k, v in skipped.items():
+            print(f"  {SKIP_REASONS[k][0]} ({len(v)}): {SKIP_REASONS[k][1]}", file=sys.stderr)
+            for item in v[:3]:
+                print(f"    {item}", file=sys.stderr)
+        if not skipped and not failed_pages:
+            print("  стартовая страница не дала ни одной ссылки на этот сайт.", file=sys.stderr)
+        if in_actions():
+            first = next(iter(skipped), "failed")
+            print(f"::error title=Обход сайта {cfg['key']}::Ни одной страницы: "
+                  f"{SKIP_REASONS.get(first, ('сайт не открылся', 'см. лог шага'))[1]}", file=sys.stderr)
         return 2
     return 0
+
+
+SKIP_REASONS = {
+    "robots": ("запрещено robots.txt",
+               "robots.txt сайта закрывает эти страницы от ботов. Если обход согласован с владельцем, "
+               "добавь опцию ignore_robots=true в значение секрета сайта (SITE_<КЛЮЧ>)."),
+    "not_html": ("не HTML", "по адресу отдаётся не страница (файл, JSON, картинка) — проверь адрес сайта."),
+    "offsite": ("редирект на другой домен", "сайт перенаправляет на другой домен — укажи в секрете конечный адрес."),
+    "duplicate": ("повтор", "редирект на уже пройденную страницу."),
+}
+
+
+def in_actions():
+    return os.environ.get("GITHUB_ACTIONS") == "true"
 
 
 def load_crawl(out_dir):
@@ -157,6 +192,18 @@ def stage_test(cfg, out_dir, name):
     return 1 if any(counts[s] for s in cfg["fail_on"]) else 0
 
 
+def crawl_problem(crawl):
+    """Почему обход пустой — одной строкой для сводки; пусто, если страницы есть."""
+    if crawl["pages"]:
+        return ""
+    skipped = crawl.get("skipped", {})
+    if skipped:
+        return SKIP_REASONS[max(skipped, key=skipped.get)][1]
+    if crawl["failed"]:
+        return f"сайт не открылся: {crawl['failed'][0][1]}. Если в браузере открывается — он режет IP раннеров GitHub."
+    return "стартовая страница не дала ни одной ссылки на этот сайт."
+
+
 def stage_report(cfg, out_dir):
     """Этап 3: сводный отчёт по сайту из результатов всех тестов."""
     crawl = load_crawl(out_dir)
@@ -177,6 +224,7 @@ def stage_report(cfg, out_dir):
         "duration_s": duration,
         "pages": len(crawl["pages"]),
         "pages_failed": len(crawl["failed"]),
+        "crawl_problem": crawl_problem(crawl),
         "run_url": os.environ.get("RUN_URL", ""),
         **stats,
     }

@@ -139,10 +139,12 @@ def same_site(netloc, host):
     return netloc.lower().removeprefix("www.") == host.lower().removeprefix("www.")
 
 
-def crawl(start, max_pages, delay=0.3, exclude=None, ignore_robots=False, failed=None):
+def crawl(start, max_pages, delay=0.3, exclude=None, ignore_robots=False, failed=None, skipped=None):
     """Отдаёт Page по каждой открывшейся HTML-странице того же сайта.
 
     Страницы, которые не открылись, складывает в failed: [(url, ошибка)].
+    Пропущенные без запроса или без разбора — в skipped: {причина: [url, …]}, чтобы пустой обход
+    объяснял себя, а не молчал.
     """
     host = urlparse(start).netloc
     robots = None
@@ -158,6 +160,8 @@ def crawl(start, max_pages, delay=0.3, exclude=None, ignore_robots=False, failed
     while queue and max_pages > 0:
         url = queue.popleft()
         if robots and not robots.can_fetch(UA, url):
+            if skipped is not None:
+                skipped.setdefault("robots", []).append(url)
             continue
         try:
             html, final, headers = fetch_page(url)
@@ -166,8 +170,12 @@ def crawl(start, max_pages, delay=0.3, exclude=None, ignore_robots=False, failed
                 failed.append((url, str(getattr(e, "code", None) or e)))
             print(f"  ! не открылась {url}: {e}", file=sys.stderr)
             continue
-        if html is None or not same_site(urlparse(final).netloc, host) or final in done:
-            continue  # не HTML, ушли на чужой сайт или редирект на уже пройденную страницу
+        reason = ("not_html" if html is None else "offsite" if not same_site(urlparse(final).netloc, host)
+                  else "duplicate" if final in done else "")
+        if reason:
+            if skipped is not None:
+                skipped.setdefault(reason, []).append(f"{url} → {final}" if final != url else url)
+            continue
         done.add(final)
         p = PageParser()
         p.feed(html)
