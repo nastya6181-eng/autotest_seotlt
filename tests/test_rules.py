@@ -49,7 +49,10 @@ class TypographyTest(unittest.TestCase):
 
     def test_double_punct(self):
         self.assertCatches("double_punct", "итак,, начнём", ",,")
+        self.assertCatches("double_punct", "конец фразы,. Начало", ",.")
         self.assertClean("double_punct", "и т. д.")
+        for ok in ("АО «ЭКОН» и др., 2 ВУЗа", "и т. д., а также", "г. Калуга, ул. Ленина, д. 5, кв. 1"):
+            self.assertClean("double_punct", ok)
 
     def test_number_range(self):
         self.assertCatches("number_range_hyphen", "с 10-20 мая", "10-20")
