@@ -1,0 +1,198 @@
+name: Site checks
+
+on:
+  schedule:
+    - cron: "0 4 * * 1-5"          # 07:00 МСК, пн–пт
+  workflow_dispatch:
+    inputs:
+      project:
+        description: "Папка в projects/ или all"
+        default: all
+      max_pages:
+        description: "Страниц на проект (пусто — из project.yml)"
+        default: ""
+      only:
+        description: "Только эти проверки: spelling,typography,links (пусто — все)"
+        default: ""
+  push:
+    branches: [main]
+    paths:
+      - "common/**"
+      - "projects/**"
+      - "tests/**"
+      - "requirements.txt"
+      - ".github/workflows/site-checks.yml"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: site-checks-${{ github.event_name }}-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  selftest:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Самопроверка правил
+        run: python -m unittest discover -v tests
+
+  plan:
+    needs: selftest
+    runs-on: ubuntu-latest
+    outputs:
+      projects: ${{ steps.list.outputs.projects }}
+    steps:
+      - uses: actions/checkout@v4
+      - id: list
+        name: Список проектов
+        env:
+          want: ${{ inputs.project || 'all' }}
+        run: |
+          projects=$(ls -d projects/*/ | xargs -n1 basename | grep -v '^_' \
+            | { [ "$want" = all ] && cat || grep -x "$want" || true; } \
+            | jq -R . | jq -cs .)
+          [ "$projects" != "[]" ] || { echo "::error::Нет проекта «$want» в projects/"; exit 1; }
+          echo "projects=$projects" >> "$GITHUB_OUTPUT"
+
+  check:
+    needs: plan
+    # Сайты могут не открываться с зарубежных IP GitHub. Тогда заведи свой раннер
+    # в РФ и укажи его метку в переменной репозитория RUNNER (Settings → Variables).
+    runs-on: ${{ vars.RUNNER || 'ubuntu-latest' }}
+    timeout-minutes: 60
+    permissions:
+      contents: read
+      checks: write
+      issues: write
+    strategy:
+      fail-fast: false
+      matrix:
+        project: ${{ fromJson(needs.plan.outputs.projects) }}
+    env:
+      REPORT_DIR: reports/${{ matrix.project }}
+      RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+
+      - run: pip install -r requirements.txt
+
+      - name: Кэш словарей Hunspell
+        uses: actions/cache@v4
+        with:
+          path: common/.cache/dict
+          key: hunspell-ru-en-v1
+
+      - name: Проверки
+        id: run
+        env:
+          max: ${{ inputs.max_pages }}
+          only: ${{ inputs.only }}
+          EVENT: ${{ github.event_name }}
+        run: |
+          args=()
+          # на push — быстрый дымовой прогон, полный обход — по расписанию и вручную
+          if [ "$EVENT" = push ]; then max=${max:-20}; fi
+          if [ -n "$max" ]; then args+=(--max-pages "$max"); fi
+          if [ -n "$only" ]; then args+=(--only "$only"); fi
+          mkdir -p "$REPORT_DIR"
+          set +e
+          python common/run_checks.py "projects/${{ matrix.project }}" --out "$REPORT_DIR" "${args[@]}" 2> "$REPORT_DIR/run.log"
+          code=$?
+          set -e
+          tail -n 5 "$REPORT_DIR/run.log"
+          echo "code=$code" >> "$GITHUB_OUTPUT"
+
+      - name: Сводка на странице прогона
+        if: always()
+        run: cat "$REPORT_DIR/summary.md" >> "$GITHUB_STEP_SUMMARY" || echo "Отчёт не создан, см. run.log" >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Отчёт в артефакт
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: report-${{ matrix.project }}
+          path: ${{ env.REPORT_DIR }}
+          retention-days: 90
+
+      - name: Результаты как тесты (вкладка Checks)
+        if: always() && hashFiles(format('{0}/junit.xml', env.REPORT_DIR)) != ''
+        uses: mikepenz/action-junit-report@v5
+        with:
+          report_paths: ${{ env.REPORT_DIR }}/junit.xml
+          check_name: "Автотесты: ${{ matrix.project }}"
+          include_passed: true
+          detailed_summary: true
+
+      - name: Issue по проекту
+        if: always() && github.event_name != 'push' && hashFiles(format('{0}/summary.json', env.REPORT_DIR)) != ''
+        env:
+          GH_TOKEN: ${{ github.token }}
+          P: ${{ matrix.project }}
+        run: |
+          failed=$(jq -r .failed "$REPORT_DIR/summary.json")
+          name=$(jq -r .project "$REPORT_DIR/summary.json")
+          gh label create autotest --color B60205 --description "Падение автотестов" 2>/dev/null || true
+          gh label create "project:$P" --color 0E8A16 2>/dev/null || true
+          num=$(gh issue list --label autotest --label "project:$P" --state open --json number -q '.[0].number // empty')
+          { cat "$REPORT_DIR/summary.md"; echo; echo "Прогон: $RUN_URL"; } > body.md
+          if [ "$failed" = true ]; then
+            if [ -n "$num" ]; then
+              gh issue comment "$num" --body-file body.md
+            else
+              gh issue create --title "Автотесты: $name — есть ошибки" --label autotest --label "project:$P" --body-file body.md
+            fi
+          elif [ -n "$num" ]; then
+            gh issue close "$num" --comment "Ошибок больше нет. Прогон: $RUN_URL"
+          fi
+
+      - name: Итог
+        if: always()
+        run: |
+          code="${{ steps.run.outputs.code }}"
+          [ "$code" = 0 ] && exit 0
+          [ "$code" = 1 ] && echo "::error::Есть замечания уровня error — см. сводку и артефакт report-${{ matrix.project }}"
+          [ "$code" = 2 ] && echo "::error::Сайт не открылся ни одной страницей"
+          exit 1
+
+  history:
+    needs: check
+    if: always() && github.event_name != 'push'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: report-*
+          path: artifacts
+      - name: Дописать метрики в ветку metrics
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898283+github-actions[bot]@users.noreply.github.com"
+          if git ls-remote --exit-code origin metrics >/dev/null; then
+            git fetch --depth=1 origin metrics && git worktree add m origin/metrics && git -C m checkout -B metrics
+          else
+            git worktree add --orphan -b metrics m
+          fi
+          mkdir -p m/history
+          for s in artifacts/report-*/summary.json; do
+            [ -f "$s" ] || continue
+            p=$(jq -r .project_key "$s")
+            f="m/history/$p.csv"
+            [ -f "$f" ] || echo "date,run,pages,pages_failed,urls,errors,warnings,info,failed,$(jq -r '.by_rule|keys_unsorted|join(",")' "$s")" > "$f"
+            jq -r --arg run "$GITHUB_RUN_ID" \
+              '[.started_at,$run,.pages,.pages_failed,(.urls_checked//0),(.findings_unique.error//0),(.findings_unique.warning//0),(.findings_unique.info//0),.failed] + [.by_rule[]] | @csv' \
+              "$s" >> "$f"
+          done
+          cd m && git add history && git commit -qm "metrics: run $GITHUB_RUN_ID" && git push -q origin metrics || echo "нечего записывать"

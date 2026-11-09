@@ -1,0 +1,16 @@
+name: Клиника Лазун
+url: https://lazun.com/
+max_pages: 300
+delay: 0.5
+exclude: null
+# robots.txt закрывает сайт от ботов; обход согласован с владельцем (задание заказчика)
+ignore_robots: true
+fail_on: [error]
+checks:
+  spelling:
+    ignore_file: ignore.txt
+  typography: {}
+  links:
+    external: true
+    workers: 2            # сайт отвечает 503 на частые запросы
+severity: {}

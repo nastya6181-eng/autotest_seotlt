@@ -1,0 +1,15 @@
+name: Иннотех
+url: https://inno.seotlt.ru/
+max_pages: 300
+delay: 0.3
+exclude: null
+ignore_robots: false
+fail_on: [error]
+checks:
+  spelling:
+    ignore_file: ignore.txt
+  typography: {}
+  links:
+    external: true
+    workers: 3
+severity: {}
