@@ -48,6 +48,33 @@ class SitesTest(unittest.TestCase):
             self.assertEqual(got["options"], {"max_rps": 0.8, "cooldown": 330.0, "max_pages": 10})
             self.assertEqual(sites.select(got["adhoc"])[0]["options"], got["options"])
 
+    @mock.patch.dict(os.environ, {"SITES": "", "SITE_INNO_TECH": "https://a.ru/ max_rps=0.8",
+                                  "SITE_SHOP": "shop.ru", "SITE_EMPTY": " "})
+    def test_per_site_vars(self):
+        got = {s["key"]: s for s in sites.select("")}
+        self.assertEqual(sorted(got), ["inno-tech", "shop"])
+        self.assertEqual(got["inno-tech"]["options"], {"max_rps": 0.8})
+        self.assertEqual(sites.select("shop")[0]["url"], "https://shop.ru")
+
+    @mock.patch.dict(os.environ, {"SITES": "shop=https://other.ru/", "SITE_SHOP": "https://shop.ru/"})
+    def test_same_key_in_both_sources_rejected(self):
+        with self.assertRaises(SystemExit):
+            sites.select("")
+
+    def test_list_sites_reads_only_site_secrets(self):
+        import json, subprocess
+        env = {k: v for k, v in os.environ.items() if not k.startswith("SITE")}
+        env["SECRETS_JSON"] = json.dumps({"SITE_A": "https://a.ru/ max_pages=5", "github_token": "x",
+                                          "OTHER": "https://leak.ru/"})
+        script = os.path.join(os.path.dirname(__file__), "..", "common", "list_sites.py")
+        out = json.loads(subprocess.run([sys.executable, script], env=env, capture_output=True,
+                                        text=True, check=True).stdout)
+        self.assertEqual(out, [{"key": "a", "secret": "SITE_A", "url": ""}])
+        masks = subprocess.run([sys.executable, script, "--mask"], env=env, capture_output=True,
+                               text=True, check=True).stdout
+        self.assertIn("::add-mask::a.ru", masks)
+        self.assertNotIn("leak.ru", masks)
+
     @mock.patch.dict(os.environ, {"SITES": ""})
     def test_no_sites(self):
         self.assertEqual(sites.select(""), [])

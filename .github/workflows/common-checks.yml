@@ -10,7 +10,7 @@ on:
   workflow_dispatch:
     inputs:
       site:
-        description: "Ключ сайта из секрета SITES, любой адрес https://… или all"
+        description: "Ключ сайта (секрет SITE_<КЛЮЧ>), любой адрес https://… или all"
         default: all
       max_pages:
         description: "Страниц на сайт (пусто — из project.yml или 200)"
@@ -73,14 +73,16 @@ jobs:
       - name: Список сайтов
         id: sites
         env:
-          # Секрет репозитория SITES (Settings → Secrets and variables → Actions → Secrets):
-          # по строке на сайт, «ключ=https://адрес [опция=значение ...]». В матрицу уходят только ключи.
+          # Секреты репозитория SITE_<КЛЮЧ> (Settings → Secrets and variables → Actions → Secrets),
+          # по одному на сайт: «https://адрес [опция=значение ...]». Из toJSON(secrets) скрипт берёт
+          # только SITE_*, в матрицу уходят ключи и имена секретов. SITES — запасной общий список.
+          SECRETS_JSON: ${{ toJSON(secrets) }}
           SITES: ${{ secrets.SITES }}
           SITE: ${{ inputs.site || 'all' }}
         run: |
           python common/list_sites.py --mask
           sites=$(python common/list_sites.py)
-          [ "$sites" != "[]" ] || { echo "::error::Нет сайтов: заведи секрет SITES"; exit 1; }
+          [ "$sites" != "[]" ] || { echo "::error::Нет сайтов: заведи секреты SITE_<КЛЮЧ>"; exit 1; }
           echo "$sites" | jq -r '"Сайтов: \(length) — " + (map(.key) | join(", "))'
           echo "sites=$sites" >> "$GITHUB_OUTPUT"
 
@@ -98,7 +100,8 @@ jobs:
       matrix:
         site: ${{ fromJson(needs.infra.outputs.sites) }}
     env:
-      SITES: ${{ secrets.SITES }}
+      # Чанк получает только секрет своего сайта, по имени из матрицы
+      SITES: ${{ matrix.site.secret && format('{0}={1}', matrix.site.key, secrets[matrix.site.secret]) || secrets.SITES }}
       SITE: ${{ matrix.site.url || matrix.site.key }}
       MAX_PAGES: ${{ inputs.max_pages || (github.event_name == 'push' && '20') || '' }}
       CHECKS: ${{ inputs.checks }}
@@ -180,6 +183,7 @@ jobs:
 
       - name: Спрятать адреса сайтов в логах
         env:
+          SECRETS_JSON: ${{ toJSON(secrets) }}
           SITES: ${{ secrets.SITES }}
         run: python common/list_sites.py --mask
 

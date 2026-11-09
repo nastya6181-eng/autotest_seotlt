@@ -1,10 +1,12 @@
 """Список сайтов из переменных окружения.
 
-SITES — все сайты для прогона, по одному на строку:
-            ключ=https://адрес [опция=значение ...]
-        Опции переопределяют настройки сайта: max_pages, delay, max_rps, cooldown,
-        ignore_robots, exclude, workers. В GitHub SITES хранится секретом репозитория.
-SITE  — один сайт: ключ из SITES или любой адрес (разовый прогон с настройками по умолчанию).
+SITE_<КЛЮЧ> — один сайт на переменную: «https://адрес [опция=значение ...]».
+        Ключ — суффикс имени в нижнем регистре, «_» → «-»: SITE_INNO_TECH → inno-tech.
+        В GitHub каждая такая переменная — отдельный секрет репозитория.
+SITES — запасной вариант для локального .env: все сайты в одной переменной, по строке
+        «ключ=https://адрес [опция=значение ...]».
+        Опции: max_pages, delay, max_rps, cooldown, ignore_robots, exclude, workers.
+SITE  — прогнать один: ключ или любой адрес (разовый прогон с настройками по умолчанию).
 
 Локально переменные читаются ещё и из файла .env в корне репозитория.
 Если есть папка projects/<ключ>/ с project.yml, её настройки применяются к сайту с этим ключом.
@@ -65,8 +67,22 @@ def parse_line(line):
     return {"key": key or key_from_url(url), "url": url, "options": options, "keyed": bool(key)}
 
 
-def parse_sites(raw):
-    lines = (l.split("#", 1)[0].strip() for l in (raw or "").splitlines())
+SITE_VAR = re.compile(r"SITE_[A-Z0-9_]+")
+
+
+def key_of(var):
+    return var[len("SITE_"):].lower().replace("_", "-")
+
+
+def site_vars(env=None):
+    """Переменные SITE_<КЛЮЧ> → строки «ключ=значение» в порядке имён."""
+    env = os.environ if env is None else env
+    return [f"{key_of(name)}={value.strip()}" for name, value in sorted(env.items())
+            if SITE_VAR.fullmatch(name) and value and value.strip()]
+
+
+def parse_sites(raw, extra_lines=()):
+    lines = [l.split("#", 1)[0].strip() for l in (raw or "").splitlines()] + list(extra_lines)
     sites = [parse_line(l) for l in lines if l]
     unkeyed = [s["url"] for s in sites if not s.pop("keyed")]
     if unkeyed:
@@ -81,10 +97,15 @@ def parse_sites(raw):
     return sites
 
 
+def all_sites():
+    """Сайты из SITE_<КЛЮЧ> и SITES вместе; ключи не должны повторяться."""
+    return parse_sites(os.environ.get("SITES"), site_vars())
+
+
 def select(site=None):
     """Сайты из SITES, отфильтрованные по SITE: ключ или адрес. Адрес не из списка — разовый прогон."""
     site = (site if site is not None else os.environ.get("SITE", "")).strip()
-    sites = parse_sites(os.environ.get("SITES"))
+    sites = all_sites()
     if not site or site == "all":
         return sites
     head, _, extra = site.partition(" ")
@@ -98,4 +119,4 @@ def select(site=None):
         line = parse_line(site)
         line.pop("keyed")
         return [{**line, "adhoc": site}]
-    raise SystemExit(f"Сайта «{site}» нет в SITES")
+    raise SystemExit(f"Сайта «{site}» нет ни в SITE_<КЛЮЧ>, ни в SITES")

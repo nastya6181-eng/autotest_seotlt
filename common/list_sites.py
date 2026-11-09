@@ -1,9 +1,12 @@
 #!/usr/bin/env python3
-"""Сайты для матрицы GitHub Actions. Учитывает SITES и SITE.
+"""Сайты для матрицы GitHub Actions. Учитывает SITE_<КЛЮЧ>, SITES и SITE.
 
-    python common/list_sites.py           JSON-список: ключи сайтов из SITES; поле url заполнено только
-                                          у разового сайта из SITE — строкой целиком, вместе с опциями
-                                          (её ввели руками в форме запуска, она не секрет)
+В пайплайне секреты приходят одной переменной SECRETS_JSON (toJSON(secrets)); отсюда берутся
+только SITE_<КЛЮЧ>, остальные секреты не читаются.
+
+    python common/list_sites.py           JSON-список: ключ сайта и имя его секрета. Поле url
+                                          заполнено только у разового сайта из SITE — строкой
+                                          целиком, с опциями (её ввели руками, она не секрет)
     python common/list_sites.py --mask    команды ::add-mask:: — спрятать адреса и домены в логах
 """
 import json
@@ -14,11 +17,14 @@ sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from sitecheck import sites  # noqa: E402
 
 sites.load_dotenv()
-selected = sites.select()
+secrets = json.loads(os.environ.pop("SECRETS_JSON", "") or "{}")
+os.environ.update({k: v for k, v in secrets.items() if sites.SITE_VAR.fullmatch(k) and isinstance(v, str)})
+secret_of = {sites.key_of(k): k for k in os.environ if sites.SITE_VAR.fullmatch(k)}
+
 if "--mask" in sys.argv:
-    for s in sites.parse_sites(os.environ.get("SITES")):
+    for s in sites.all_sites():
         for value in {s["url"], s["url"].rstrip("/"), sites.host(s["url"])}:
             print(f"::add-mask::{value}")
 else:
-    print(json.dumps([{"key": s["key"], "url": s.get("adhoc") or ""} for s in selected],
-                     ensure_ascii=False))
+    print(json.dumps([{"key": s["key"], "secret": "" if s.get("adhoc") else secret_of.get(s["key"], ""),
+                       "url": s.get("adhoc") or ""} for s in sites.select()], ensure_ascii=False))
