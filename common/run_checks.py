@@ -6,6 +6,7 @@
                 или просто адрес. Не задан — берутся сайты из папок projects/
     SITE        прогнать только один: ключ из SITES или любой адрес
     MAX_PAGES   переопределить лимит страниц
+    MAX_RPS     не чаще N запросов в секунду к сайту (поверх max_rps из project.yml)
     CHECKS      только эти проверки: spelling,typography,links
 
 Примеры:
@@ -38,7 +39,7 @@ from dataclasses import asdict
 import yaml
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
-from sitecheck import crawler, links, report, sites, spelling, typography  # noqa: E402
+from sitecheck import crawler, links, report, sites, spelling, throttle, typography  # noqa: E402
 from sitecheck.findings import SEVERITIES, Finding  # noqa: E402
 
 ROOT = sites.ROOT
@@ -189,6 +190,7 @@ def enabled_checks(cfg):
 
 
 def check_site(cfg, out_dir, stage="all"):
+    throttle.configure(cfg["url"], os.environ.get("MAX_RPS") or cfg.get("max_rps"), cfg.get("cooldown"))
     if stage == "crawl":
         return stage_crawl(cfg, out_dir)
     if stage == "test":

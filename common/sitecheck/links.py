@@ -8,6 +8,7 @@ from urllib.error import HTTPError, URLError
 from urllib.parse import quote, unquote, urldefrag, urljoin, urlparse
 from urllib.request import HTTPRedirectHandler, Request, build_opener
 
+from . import throttle
 from .crawler import RETRY_STATUSES, UA, retry_pause, same_site
 from .findings import make
 
@@ -35,6 +36,7 @@ OPENER = build_opener(NoRedirect)
 
 def request(url, method, timeout):
     req = Request(url, method=method, headers={"User-Agent": UA, "Accept": "*/*"})
+    throttle.wait(url)
     try:
         r = OPENER.open(req, timeout=timeout)
         return r.status, r.headers, r
@@ -55,7 +57,8 @@ def check_url(url, timeout=15, max_redirects=10, retries=3):
                     resp.close()
                 if status not in RETRY_STATUSES or attempt == retries:
                     break
-                time.sleep(retry_pause(headers, attempt))
+                if not throttle.rate_limited(current, status, headers):
+                    time.sleep(retry_pause(headers, attempt))
         except ssl.SSLError as e:
             return None, current, chain, f"SSL: {e.reason or e}"
         except URLError as e:

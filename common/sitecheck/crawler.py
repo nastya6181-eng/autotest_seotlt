@@ -10,6 +10,8 @@ from urllib.error import HTTPError
 from urllib.parse import quote, urldefrag, urljoin, urlparse
 from urllib.request import Request, build_opener
 
+from . import throttle
+
 UA = "Mozilla/5.0 (seotlt-autotest)"
 RETRY_STATUSES = {429, 502, 503, 504}
 SKIP_TAGS = {"script", "style", "noscript", "svg", "template", "code", "pre"}
@@ -91,6 +93,7 @@ def fetch_page(url, retries=3):
     req = Request(url, headers={"User-Agent": UA})
     opener = build_opener()
     for attempt in range(retries + 1):
+        throttle.wait(url)
         try:
             with opener.open(req, timeout=20) as r:
                 if "text/html" not in r.headers.get("Content-Type", ""):
@@ -100,7 +103,8 @@ def fetch_page(url, retries=3):
         except HTTPError as e:
             if e.code not in RETRY_STATUSES or attempt == retries:
                 raise
-            time.sleep(retry_pause(e.headers, attempt))
+            if not throttle.rate_limited(url, e.code, e.headers):
+                time.sleep(retry_pause(e.headers, attempt))
 
 
 def same_site(netloc, host):
