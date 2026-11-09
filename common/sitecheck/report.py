@@ -101,7 +101,7 @@ def scrub(text, base):
     text = re.sub(r"\s+", " ", str(text or "")).strip()
     host = urlsplit(base).netloc.lower().removeprefix("www.") if base else ""
     if host:
-        text = re.sub(rf"(?i)(https?://)?(www\.)?{re.escape(host)}", "", text).strip()
+        text = re.sub(rf"(?i)(?<![\w.-])(https?://)?(www\.)?{re.escape(host)}(?![\w-]|\.[\w-])", "", text).strip()
     return text.replace("::", ": :")
 
 

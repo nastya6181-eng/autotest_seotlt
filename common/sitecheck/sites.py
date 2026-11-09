@@ -55,12 +55,13 @@ def parse_line(line):
     options = {}
     for opt in opts:
         name, sep, value = opt.partition("=")
+        who = key or "без ключа"  # адрес в ошибку не пишем: она печатается до маскировки
         if not sep or name not in OPTIONS:
-            raise SystemExit(f"Опция «{opt}» у сайта {key or url}: допустимо {', '.join(OPTIONS)}")
+            raise SystemExit(f"Опция «{name}» у сайта {who}: допустимо {', '.join(OPTIONS)}")
         try:
             options[name] = OPTIONS[name](value)
         except ValueError:
-            raise SystemExit(f"Опция «{opt}» у сайта {key or url}: неверное значение") from None
+            raise SystemExit(f"Опция «{name}» у сайта {who}: неверное значение") from None
     return {"key": key or key_from_url(url), "url": url, "options": options, "keyed": bool(key)}
 
 

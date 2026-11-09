@@ -51,6 +51,8 @@ class RelativeTest(unittest.TestCase):
         from sitecheck.report import scrub
         self.assertEqual(scrub("Пишите: https://www.site.ru/contacts/ или site.ru", "https://site.ru/"),
                          "Пишите: /contacts/ или")
+        self.assertEqual(scrub("https://site.ru.evil.com/x и othersite.ru", "https://site.ru/"),
+                         "https://site.ru.evil.com/x и othersite.ru")
         forged = scrub("a\n::error::forged", "https://site.ru/")
         self.assertNotIn("\n", forged)
         self.assertNotIn("::", forged)
