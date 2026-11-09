@@ -61,8 +61,9 @@ def load_config(site, max_pages=None, only=None):
     """Настройки сайта: умолчания ← projects/<ключ>/project.yml ← опции из SITES ← env и флаги."""
     cfg = {**DEFAULTS, "checks": {k: dict(v) for k, v in DEFAULTS["checks"].items()}}
     project_dir = sites.project_dir(site["key"])
-    if project_dir:
-        with open(os.path.join(project_dir, "project.yml"), encoding="utf-8") as f:
+    yml = os.path.join(project_dir, "project.yml") if project_dir else ""
+    if yml and os.path.exists(yml):
+        with open(yml, encoding="utf-8") as f:
             data = yaml.safe_load(f) or {}
         for k, v in data.items():
             if k == "checks":
@@ -88,6 +89,9 @@ def load_config(site, max_pages=None, only=None):
     for name, opts in cfg["checks"].items():
         if name not in CHECKS:
             sys.exit(f"Неизвестная проверка {name}. Есть: {', '.join(CHECKS)}")
+        if name == "spelling" and project_dir and not opts.get("ignore_file") \
+                and os.path.exists(os.path.join(project_dir, "ignore.txt")):
+            opts["ignore_file"] = "ignore.txt"  # projects/<ключ>/ignore.txt подхватывается сам
         if opts.get("ignore_file") and project_dir:
             opts["ignore_file"] = os.path.join(project_dir, opts["ignore_file"])
     for rule, sev in cfg["severity"].items():

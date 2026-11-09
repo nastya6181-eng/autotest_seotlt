@@ -44,8 +44,10 @@ def key_from_url(url):
 
 
 def project_dir(key):
+    """Папка настроек сайта: есть project.yml или хотя бы ignore.txt."""
     path = os.path.join(PROJECTS, key)
-    return path if os.path.exists(os.path.join(path, "project.yml")) else None
+    has = any(os.path.exists(os.path.join(path, f)) for f in ("project.yml", "ignore.txt"))
+    return path if has else None
 
 
 def parse_line(line):
