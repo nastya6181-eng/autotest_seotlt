@@ -57,6 +57,16 @@ class ReportTest(unittest.TestCase):
             report.write_all(out, META, FINDINGS, RULES, ["error", "warning"])
             page = open(os.path.join(out, "summary.md"), encoding="utf-8").read()
         self.assertIn("[/b/](https://site.ru/b/)", page)
+        self.assertIn("[пн - пт](https://site.ru/b/#:~:text=%D0%BF%D0%BD%20%2D%20%D0%BF%D1%82)", page)
+
+    def test_log_lists_pages_and_how_to_find(self):
+        twice = [Finding("typography", "hyphen_as_dash", "warning", "Дефис вместо тире", "пн - пт", u, "часы пн - пт")
+                 for u in ("https://site.ru/", "https://site.ru/b/", "https://site.ru/c/")]
+        log = report.format_test_log("typography", {"typography.hyphen_as_dash": RULES["typography.hyphen_as_dash"]},
+                                     twice, ["warning"], base="https://site.ru/")
+        self.assertIn("✘ / (главная)", log)
+        self.assertIn("то же ещё на 2 стр.: /b/, /c/", log)
+        self.assertIn("найти:    Ctrl+F «пн - пт»", log)
 
     def test_page_level_reason_is_kept(self):
         failed = Finding("links", "page_failed", "error", "Страница не открылась: 403", "", "https://site.ru/x/")

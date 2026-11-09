@@ -9,7 +9,7 @@ import json
 import os
 import re
 from collections import Counter, defaultdict
-from urllib.parse import urlsplit, urlunsplit
+from urllib.parse import quote, urlsplit, urlunsplit
 from xml.sax.saxutils import escape, quoteattr
 
 from .hints import hint, source
@@ -92,8 +92,29 @@ def scrub(text, base):
 
 
 def show(url, base):
-    """Адрес для публичных мест (лог, сводка, Checks): полный или путём своего сайта."""
-    return scrub(url if full_urls() else relative(url, base), base) or "/"
+    """Адрес для публичных мест (лог, сводка, Checks): полный или путём своего сайта.
+    Главная подписана словами — голый «/» не читается как адрес страницы."""
+    text = scrub(url if full_urls() else relative(url, base), base) or "/"
+    return "/ (главная)" if text == "/" else text
+
+
+TEXT_CHECKS = {"typography", "spelling"}
+
+
+def find_hint(f, url, base):
+    """Как найти фрагмент на странице. С полными адресами — ссылка, которая открывает страницу
+    и подсвечивает текст (якорь #:~:text= в Chrome, Edge, Safari); иначе — что искать через Ctrl+F."""
+    if f.check not in TEXT_CHECKS or not f.fragment or f.fragment.startswith(("http://", "https://")):
+        return ""
+    if full_urls() and url.startswith("http"):
+        # «-», «,» и «&» в этом якоре служебные, внутри текста — только закодированными
+        return f"{url.split('#')[0]}#:~:text={quote(f.fragment, safe='').replace('-', '%2D')}"
+    return f"Ctrl+F «{scrub(f.fragment, base)[:80]}»"
+
+
+def pages_line(pages, base, limit=30):
+    more = ", ".join(show(p, base) for p in pages[:limit])
+    return more + (f" … ещё {len(pages) - limit}" if len(pages) > limit else "")
 
 
 def show_fragment(fragment, base):
@@ -147,14 +168,18 @@ def format_test_log(name, rules, findings, fail_on, base="", limit=100):
                     shown += 1
                 continue
             shown += 1
-            where = show(pages[0], base) + (f"  (+ ещё {len(pages) - 1} стр.)" if len(pages) > 1 else "")
-            lines.append(f"   ✘ {where}")
+            lines.append(f"   ✘ {show(pages[0], base)}")
             if f.fragment and f.fragment != f.page:
                 lines.append(f"       что:      «{show_fragment(f.fragment, base)[:120]}»")
             if f.message != title:
                 lines.append(f"       почему:   {scrub(f.message, base)[:160]}")
             if f.context and f.context != f.fragment:
                 lines.append(f"       контекст: …{scrub(f.context, base)[:140]}…")
+            found = find_hint(f, pages[0], base)
+            if found:
+                lines.append(f"       найти:    {found}")
+            if len(pages) > 1:
+                lines.append(f"       то же ещё на {len(pages) - 1} стр.: {pages_line(pages[1:], base)}")
         rest = sum(len(g["pages"]) if not g["f"].fragment or g["f"].fragment == g["f"].page else 1 for g in rows) - shown
         if rest > 0:
             lines.append(f"   … и ещё {rest} — все в findings.csv (артефакт прогона)")
@@ -199,7 +224,8 @@ def link(url, base):
     """Страница в сводке: кликабельная ссылка при полных адресах, иначе путь."""
     shown = cell(show(url, base))[:150]
     if full_urls() and url.startswith("http") and len(url) <= 2000:
-        return f"[{cell(relative(url, base))[:150]}]({url})"
+        label = cell(relative(url, base))[:150]
+        return f"[{'/ (главная)' if label == '/' else label}]({url})"
     return shown
 
 
@@ -259,6 +285,9 @@ def summary_text(summary, rules, groups, limit):
                 y, pages = g["f"], g["pages"]
                 page_level = not y.fragment or y.fragment == y.page
                 what = "—" if page_level else cell(show_fragment(y.fragment, base))[:120]
+                found = "" if page_level else find_hint(y, pages[0], base)
+                if found.startswith("http") and len(found) <= 2000:
+                    what = f"[{what}]({found})"
                 if y.message != title:
                     what += f"<br><sub>{cell(scrub(y.message, base))[:120]}</sub>"
                 ctx = cell(scrub(y.context, base))[:160]
