@@ -2,7 +2,9 @@
 import csv
 import json
 import os
+import re
 from collections import Counter, defaultdict
+from urllib.parse import urlsplit, urlunsplit
 from xml.sax.saxutils import escape, quoteattr
 
 SEV_ORDER = {"error": 0, "warning": 1, "info": 2}
@@ -71,8 +73,61 @@ def write_markdown(path, summary, groups):
             f.write("\n")
 
 
-def write_step_summary(path, summary, rules):
-    """Короткая сводка для страницы прогона в GitHub Actions."""
+SEV_ICON = {"error": "🔴", "warning": "🟠", "info": "⚪"}
+
+
+def by_rule(groups):
+    rules = defaultdict(list)
+    for g in groups:
+        rules[g["f"].rule_id].append(g)
+    return sorted(rules.items(), key=lambda kv: (SEV_ORDER[kv[1][0]["f"].severity], -len(kv[1])))
+
+
+def relative(value, base):
+    """Адрес своего сайта → путь (/about/): домен не светится в публичной сводке и логах."""
+    if not base or not value or not value.lower().startswith(("http://", "https://")):
+        return value
+    try:
+        b, v = urlsplit(base), urlsplit(value)
+    except ValueError:
+        return value
+    if v.netloc and v.netloc.lower().removeprefix("www.") == b.netloc.lower().removeprefix("www."):
+        return urlunsplit(("", "", v.path or "/", v.query, v.fragment))
+    return value
+
+
+def scrub(text, base):
+    """Одна строка (перевод строки в логе Actions — это команда) и без домена своего сайта."""
+    text = re.sub(r"\s+", " ", str(text or "")).strip()
+    host = urlsplit(base).netloc.lower().removeprefix("www.") if base else ""
+    if host:
+        text = re.sub(rf"(?i)(https?://)?(www\.)?{re.escape(host)}", "", text).strip()
+    return text
+
+
+def format_text(groups, limit=15, base=""):
+    """Что и где чинить — для лога шага и терминала. Адреса своего сайта — путями."""
+    lines = []
+    for rule_id, rows in by_rule(groups):
+        x = rows[0]["f"]
+        lines.append(f"\n{SEV_ICON[x.severity]} {rule_id} [{x.severity}] {scrub(x.message.split(';')[0], base)} — {len(rows)}")
+        for g in rows[:limit]:
+            f, pages = g["f"], g["pages"]
+            where = scrub(relative(pages[0], base), base) or "/"
+            where += f"  (+ ещё {len(pages) - 1} стр.)" if len(pages) > 1 else ""
+            if f.fragment and f.fragment != f.page:
+                lines.append(f"   «{scrub(relative(f.fragment, base), base)[:100]}»  →  {where}")
+            else:
+                lines.append(f"   {where}")
+            if f.context and f.context != f.fragment:
+                lines.append(f"      …{scrub(f.context, base)[:140]}…")
+        if len(rows) > limit:
+            lines.append(f"   … и ещё {len(rows) - limit} — полный список в report.md / findings.csv")
+    return "\n".join(lines)
+
+
+def write_step_summary(path, summary, rules, groups=()):
+    """Сводка для страницы прогона в GitHub Actions: цифры и что где чинить."""
     u = summary["findings_unique"]
     icon = "❌" if summary["failed"] else "✅"
     with open(path, "w", encoding="utf-8") as f:
@@ -84,7 +139,23 @@ def write_step_summary(path, summary, rules):
         for rule, n in sorted(summary["by_rule"].items(), key=lambda kv: -kv[1]):
             if n:
                 f.write(f"| {rules[rule][1]} (`{rule}`) | {rules[rule][0]} | {n} |\n")
-        f.write("\nПолный отчёт — в артефакте прогона.\n")
+        f.write("\n#### Что и где чинить\n\n")
+        for rule_id, rows in by_rule(groups):
+            x = rows[0]["f"]
+            f.write(f"<details><summary>{SEV_ICON[x.severity]} <b>{escape(rules[rule_id][1])}</b> "
+                    f"— {len(rows)} <code>{rule_id}</code></summary>\n\n"
+                    "| что | где | контекст |\n|---|---|---|\n")
+            for g in rows[:20]:
+                y, pages = g["f"], g["pages"]
+                base = summary["url"]
+                what = cell(scrub(relative(y.fragment, base), base))[:100] if y.fragment and y.fragment != y.page else "—"
+                where = cell(scrub(relative(pages[0], base), base) or "/")
+                where += f" (+ ещё {len(pages) - 1})" if len(pages) > 1 else ""
+                f.write(f"| {what} | {where} | {cell(scrub(y.context, base))[:140]} |\n")
+            if len(rows) > 20:
+                f.write(f"\nЕщё {len(rows) - 20} — в артефакте, файл report.md.\n")
+            f.write("\n</details>\n")
+        f.write("\nПолный отчёт (report.md, findings.csv) и логи каждого теста — в артефакте прогона.\n")
 
 
 def write_junit(path, summary, groups, rules):
@@ -130,7 +201,7 @@ def write_all(out_dir, meta, findings, rules, fail_on):
     summary = build_summary(meta, findings, rules, fail_on)
     write_csv(os.path.join(out_dir, "findings.csv"), active)
     write_markdown(os.path.join(out_dir, "report.md"), summary, groups)
-    write_step_summary(os.path.join(out_dir, "summary.md"), summary, rules)
+    write_step_summary(os.path.join(out_dir, "summary.md"), summary, rules, groups)
     write_junit(os.path.join(out_dir, "junit.xml"), summary, groups, rules)
     with open(os.path.join(out_dir, "summary.json"), "w", encoding="utf-8") as f:
         json.dump(summary, f, ensure_ascii=False, indent=2)

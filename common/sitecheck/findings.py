@@ -1,4 +1,5 @@
 """Общая модель замечания и уровни важности."""
+import re
 from dataclasses import dataclass
 
 # Уровень — приоритет исправления. Тест красный, если у правила есть замечания уровня из fail_on
@@ -35,4 +36,4 @@ def make(check, rules, overrides):
 
 
 def context(text, start, end, pad=40):
-    return text[max(0, start - pad):end + pad].replace("\n", " ").strip()
+    return re.sub(r"\s+", " ", text[max(0, start - pad):end + pad]).strip()

@@ -39,6 +39,21 @@ class SeoTest(unittest.TestCase):
         self.assertEqual(mixed, ["http://cdn.site.ru/a.js"])
 
 
+class RelativeTest(unittest.TestCase):
+    def test_relative(self):
+        from sitecheck.report import relative
+        self.assertEqual(relative("https://www.site.ru/a/?x=1", "https://site.ru/"), "/a/?x=1")
+        self.assertEqual(relative("https://other.ru/a", "https://site.ru/"), "https://other.ru/a")
+        for text in ("//[broken", "http://[broken", "понедельник - пятница"):
+            self.assertEqual(relative(text, "https://site.ru/"), text)
+
+    def test_scrub(self):
+        from sitecheck.report import scrub
+        self.assertEqual(scrub("Пишите: https://www.site.ru/contacts/ или site.ru", "https://site.ru/"),
+                         "Пишите: /contacts/ или")
+        self.assertNotIn("\n", scrub("a\n::error::forged", "https://site.ru/"))
+
+
 class RobotsTest(unittest.TestCase):
     def test_blocks_all(self):
         self.assertEqual(robots_blocks_all("User-agent: *\nDisallow: /"), {"*"})

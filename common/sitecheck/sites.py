@@ -57,13 +57,23 @@ def parse_line(line):
         name, sep, value = opt.partition("=")
         if not sep or name not in OPTIONS:
             raise SystemExit(f"Опция «{opt}» у сайта {key or url}: допустимо {', '.join(OPTIONS)}")
-        options[name] = OPTIONS[name](value)
+        try:
+            options[name] = OPTIONS[name](value)
+        except ValueError:
+            raise SystemExit(f"Опция «{opt}» у сайта {key or url}: неверное значение") from None
     return {"key": key or key_from_url(url), "url": url, "options": options}
 
 
 def parse_sites(raw):
     lines = (l.split("#", 1)[0].strip() for l in (raw or "").splitlines())
-    return [parse_line(l) for l in lines if l]
+    sites = [parse_line(l) for l in lines if l]
+    keys = [s["key"] for s in sites]
+    if "all" in keys:
+        raise SystemExit("Ключ «all» занят: SITE=all значит «все сайты». Переименуй сайт в SITES")
+    dupes = sorted({k for k in keys if keys.count(k) > 1})
+    if dupes:
+        raise SystemExit(f"В SITES повторяются ключи: {', '.join(dupes)} — у каждого сайта свой ключ")
+    return sites
 
 
 def select(site=None):
@@ -72,9 +82,13 @@ def select(site=None):
     sites = parse_sites(os.environ.get("SITES"))
     if not site or site == "all":
         return sites
-    found = [s for s in sites if s["key"] == site or s["url"].rstrip("/") == site.rstrip("/")]
+    head, _, extra = site.partition(" ")
+    found = [s for s in sites if s["key"] == head or s["url"].rstrip("/") == head.rstrip("/")]
+    if found and extra.strip():
+        overrides = parse_line(f"{found[0]['url']} {extra}")["options"]
+        return [{**found[0], "options": {**found[0]["options"], **overrides}, "adhoc": site}]
     if found:
         return found
     if "." in site:
-        return [{**parse_line(site), "adhoc": True}]
+        return [{**parse_line(site), "adhoc": site}]
     raise SystemExit(f"Сайта «{site}» нет в SITES")
