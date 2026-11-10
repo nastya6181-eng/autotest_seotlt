@@ -3,7 +3,7 @@
 # Один пайплайн, три этапа:
 #   infra  — самопроверка, зависимости, словари, список сайтов
 #   tests  — чанк на каждый сайт: обход сайта, затем тесты по одному шагу на проверку
-#   logs   — сборщик: логи и отчёты всех чанков, сводка, Checks, issues, история
+#   logs   — сборщик: логи и отчёты всех чанков, сводка, Checks, история
 name: Common checks
 
 on:
@@ -184,7 +184,6 @@ jobs:
     permissions:
       contents: write     # история в ветку metrics
       checks: write       # результаты тестов во вкладку Checks
-      issues: write       # issue по сайту с ошибками
     steps:
       - uses: actions/checkout@v4
 
@@ -224,26 +223,6 @@ jobs:
           check_name: Общие проверки сайтов
           include_passed: true
           detailed_summary: true
-
-      - name: Issues по сайтам
-        env:
-          GH_TOKEN: ${{ github.token }}
-        run: |
-          gh label create autotest --color B60205 --description "Падение автотестов" 2>/dev/null || true
-          for s in collected/report-*/summary.json; do
-            [ -f "$s" ] || continue
-            key=$(jq -r .project_key "$s"); name=$(jq -r .project "$s"); failed=$(jq -r .failed "$s")
-            gh label create "site:$key" --color 0E8A16 2>/dev/null || true
-            num=$(gh issue list --label autotest --label "site:$key" --state open --json number -q '.[0].number // empty')
-            { cat "$(dirname "$s")/summary.md"; echo; echo "Прогон: $RUN_URL"; } > body.md
-            if [ "$failed" = true ]; then
-              if [ -n "$num" ]; then gh issue comment "$num" --body-file body.md
-              else gh issue create --title "Автотесты: $name — есть ошибки" --label autotest --label "site:$key" --body-file body.md
-              fi
-            elif [ -n "$num" ]; then
-              gh issue close "$num" --comment "Ошибок больше нет. Прогон: $RUN_URL"
-            fi
-          done
 
       - name: История в ветку metrics
         run: |
