@@ -1,8 +1,8 @@
 # Сверка вёрстки с макетами Figma — отдельный пайплайн, только ручной запуск.
-#   infra  — самопроверка, матрица «сайт × страница»: секреты SITE_<КЛЮЧ> × страницы из projects/<ключ>/design/pages.yml
+#   infra  — самопроверка, матрица «сайт × страница»: секреты SITE_<КЛЮЧ> × страницы из sites/<ключ>/design/pages.yml
 #   tests  — чанк на каждую страницу, параллельно: браузер на ширине макета, сравнение текстов
 #   logs   — сборщик: общая таблица, Checks
-# Макеты — JSON, извлечённый из SVG-экспорта Figma (design/design_compare.py extract), лежит в репозитории.
+# Макеты — JSON, извлечённый из SVG-экспорта Figma (checks/design/design_compare.py extract), лежит в репозитории.
 name: Design checks
 run-name: "Design checks · ${{ inputs.site || 'all' }}${{ inputs.page && format(' · {0}', inputs.page) || '' }}"
 
@@ -56,9 +56,9 @@ jobs:
           SITE: ${{ inputs.site || 'all' }}
           DESIGN_PAGE: ${{ inputs.page }}
         run: |
-          python common/list_sites.py --mask
-          pages=$(python common/list_sites.py --design-pages)
-          [ "$pages" != "[]" ] || { echo "::error::Нет страниц: нужен секрет SITE_<КЛЮЧ> и projects/<ключ>/design/pages.yml (или нет страницы «$DESIGN_PAGE»)"; exit 1; }
+          python checks/core/list_sites.py --mask
+          pages=$(python checks/core/list_sites.py --design-pages)
+          [ "$pages" != "[]" ] || { echo "::error::Нет страниц: нужен секрет SITE_<КЛЮЧ> и sites/<ключ>/design/pages.yml (или нет страницы «$DESIGN_PAGE»)"; exit 1; }
           echo "$pages" | jq -r '"Страниц: \(length) — " + (map("\(.key) · \(.page)") | join(", "))'
           echo "sites=$pages" >> "$GITHUB_OUTPUT"
 
@@ -89,13 +89,13 @@ jobs:
           cache: pip
       - run: pip install -r requirements-design.txt
       - name: Спрятать адреса сайтов в логах
-        run: python common/list_sites.py --mask
+        run: python checks/core/list_sites.py --mask
       - name: Браузер
         run: python -m playwright install --with-deps chromium
       - name: "Тест: макет"
         run: |
           mkdir -p "$OUT/logs"
-          python design/design_compare.py run 2>&1 | tee "$OUT/logs/design.log"
+          python checks/design/design_compare.py run 2>&1 | tee "$OUT/logs/design.log"
       - name: Результаты чанка
         id: artifact
         if: always()
@@ -137,7 +137,7 @@ jobs:
             mv "$d" "collected/report-${d#collected/design-}"
           done
       - name: Общая сводка
-        run: python common/build_index.py collected | sed 's/## Общие проверки сайтов/## Сверка вёрстки с макетами/' >> "$GITHUB_STEP_SUMMARY"
+        run: python checks/core/build_index.py collected | sed 's/## Общие проверки сайтов/## Сверка вёрстки с макетами/' >> "$GITHUB_STEP_SUMMARY"
       - name: Результаты как тесты (вкладка Checks)
         if: hashFiles('collected/**/junit.xml') != ''
         uses: mikepenz/action-junit-report@v5

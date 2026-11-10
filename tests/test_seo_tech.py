@@ -3,11 +3,11 @@ import os
 import sys
 import unittest
 
-sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "common"))
+sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))  # корень репозитория
 os.environ.pop("REPORT_FULL_URLS", None)  # тесты режима по умолчанию; полные адреса — в своём тесте
-from sitecheck import seo  # noqa: E402
-from sitecheck.crawler import Page, PageParser  # noqa: E402
-from sitecheck.tech import robots_blocks_all  # noqa: E402
+from checks.content import seo  # noqa: E402
+from checks.core.crawler import Page, PageParser  # noqa: E402
+from checks.content.tech import robots_blocks_all  # noqa: E402
 
 HTML = """<html lang="ru"><head><title>Главная — Компания</title>
 <meta name="description" content="Описание"><meta name="robots" content="noindex, follow">
@@ -42,14 +42,14 @@ class SeoTest(unittest.TestCase):
 
 class RelativeTest(unittest.TestCase):
     def test_relative(self):
-        from sitecheck.report import relative
+        from checks.core.report import relative
         self.assertEqual(relative("https://www.site.ru/a/?x=1", "https://site.ru/"), "/a/?x=1")
         self.assertEqual(relative("https://other.ru/a", "https://site.ru/"), "https://other.ru/a")
         for text in ("//[broken", "http://[broken", "понедельник - пятница"):
             self.assertEqual(relative(text, "https://site.ru/"), text)
 
     def test_scrub(self):
-        from sitecheck.report import scrub
+        from checks.core.report import scrub
         self.assertEqual(scrub("Пишите: https://www.site.ru/contacts/ или site.ru", "https://site.ru/"),
                          "Пишите: /contacts/ или")
         self.assertEqual(scrub("https://site.ru.evil.com/x и othersite.ru", "https://site.ru/"),

@@ -6,10 +6,10 @@ import tempfile
 import unittest
 
 ROOT = os.path.join(os.path.dirname(__file__), "..")
-sys.path.insert(0, os.path.join(ROOT, "common"))
+sys.path.insert(0, ROOT)  # корень репозитория
 os.environ.pop("REPORT_FULL_URLS", None)  # тесты режима по умолчанию; полные адреса — в своём тесте
-from sitecheck import report  # noqa: E402
-from sitecheck.findings import Finding  # noqa: E402
+from checks.core import report  # noqa: E402
+from checks.core.findings import Finding  # noqa: E402
 
 RULES = {"seo.missing_h1": ("warning", "Нет заголовка H1"), "links.redirect": ("info", "Редирект"),
          "typography.hyphen_as_dash": ("warning", "Дефис вместо тире")}
@@ -24,7 +24,7 @@ META = {"project": "t", "project_key": "t", "url": "https://site.ru/", "started_
 
 def code_digest():
     h = hashlib.sha256()
-    for d, _, files in os.walk(os.path.join(ROOT, "common")):
+    for d, _, files in os.walk(os.path.join(ROOT, "checks")):
         for name in sorted(files):
             if name.endswith(".py"):
                 with open(os.path.join(d, name), "rb") as f:
@@ -49,7 +49,7 @@ class ReportTest(unittest.TestCase):
         self.assertIn("| /b/ | пн - пт | часы пн - пт |", page)
         self.assertIn("| /a/ | — |", page)
         self.assertIn("**Как исправить:**", page)
-        self.assertIn("Правило в коде: `common/sitecheck/seo.py:", page)
+        self.assertIn("Правило в коде: `checks/content/seo.py:", page)
 
     def test_full_urls_are_clickable(self):
         from unittest import mock
@@ -94,7 +94,7 @@ class ReportTest(unittest.TestCase):
         self.assertIn("✘ seo.missing_h1", log)
         self.assertIn("✔ seo.noindex", log)
         self.assertIn("✘ /a/", log)
-        self.assertIn("Правило в коде: common/sitecheck/seo.py:", log)
+        self.assertIn("Правило в коде: checks/content/seo.py:", log)
 
 
 if __name__ == "__main__":

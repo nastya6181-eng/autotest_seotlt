@@ -2,56 +2,59 @@
 
 [![Common checks](https://github.com/nastya6181-eng/autotest_seotlt/actions/workflows/common-checks.yml/badge.svg)](https://github.com/nastya6181-eng/autotest_seotlt/actions/workflows/common-checks.yml)
 
-Автоматические проверки клиентских сайтов. Общие проверки (орфография, типографика, ссылки)
-лежат в `common/` и работают для любого сайта. Какие сайты проверять, задаётся переменными
-окружения: по переменной `SITE_<КЛЮЧ>` на сайт. В GitHub каждая из них — отдельный секрет, в репозитории адресов сайтов нет.
-Папка в `projects/` нужна, только если у сайта объёмные свои настройки
-или, со временем, свои проверки.
+Автоматические проверки клиентских сайтов. Репозиторий делится на две части по одному правилу:
+
+- **`checks/` — как проверять.** Код проверок, один на все сайты.
+- **`sites/` — что проверять.** Данные: по папке на сайт, в ней паспорт и настройки для каждого слоя.
+
+Адреса сайтов в репозитории не хранятся: каждый сайт — секрет `SITE_<КЛЮЧ>` в GitHub.
 
 ## Структура
 
 ```
-common/                   общие проверки для всех сайтов
-  run_checks.py           точка входа
-  list_sites.py           список сайтов в JSON для пайплайна
-  sitecheck/
-    crawler.py            обход сайта (один проход на все проверки)
-    tech.py               robots.txt, SSL, https, мягкий 404, sitemap
-    seo.py                noindex, title, description, H1, alt, смешанный контент
-    throttle.py           бережный темп запросов и пауза после бана
-    spelling.py           орфография: словари Hunspell ru_RU + en_US
-    typography.py         пробелы, дефисы и тире, кавычки, пунктуация
-    links.py              битые ссылки, кривые href, якоря, редиректы
-    report.py             отчёты: md, csv, json, JUnit
-    sites.py              разбор SITE_<КЛЮЧ> / SITES / SITE / .env
-  dictionaries/ignore.txt слова-исключения для всех проектов
-.env.example              пример переменных для локального запуска
-projects/
-  _template/              шаблон нового проекта: настройки и описания для каждого слоя
-  README.md               оглавление сайтов: какие слои у кого подключены
-  <ключ>/                 сайт: README.md (паспорт), ignore.txt, project.yml,
-    design/ frontend/ backend/ integrations/   что проверять на этом сайте в каждом слое
-design/                   сверка вёрстки с макетом Figma — см. design/README.md
-frontend/                 фронт: ошибки JS, адаптив, сценарии в браузере — каркас, см. frontend/README.md
-backend/                  бэк: ответы сервера, AJAX, формы, полнота данных — каркас, см. backend/README.md
-integrations/             интеграции: карты, счётчики, доставка заявок, почта домена — каркас, см. integrations/README.md
-tests/                    самопроверка правил
-.github/workflows/        пайплайны: общие проверки, сверка с макетом, самопроверка
+checks/                       КАК проверять — код
+  core/                       общее для всех слоёв
+    crawler.py                обход сайта (один проход на все проверки)
+    report.py                 лог теста и отчёты: сводка, md, csv, json, JUnit
+    sites.py                  сайты из SITE_<КЛЮЧ> / SITES / SITE / .env
+    throttle.py               бережный темп запросов и пауза после бана
+    findings.py, hints.py     модель замечания, «как исправить» по каждому правилу
+    list_sites.py             матрица сайтов для пайплайнов
+    build_index.py            общая таблица по сайтам для страницы прогона
+  content/                    контент и SEO (пайплайн Common checks)
+    run_checks.py             точка входа
+    tech.py, seo.py           robots, SSL, https, sitemap; noindex, title, description, H1, alt
+    links.py                  битые ссылки, кривые href, якоря, редиректы
+    spelling.py, typography.py  орфография (Hunspell ru/en), пробелы, тире, кавычки
+    dictionaries/ignore.txt   слова-исключения для всех сайтов
+  design/                     сверка с макетом Figma (пайплайн Design checks) — см. checks/design/README.md
+  frontend/  backend/  integrations/   каркас будущих слоёв — README в каждой папке
+sites/                        ЧТО проверять — данные
+  README.md                   оглавление: какие сайты и слои подключены
+  _template/                  заготовка нового сайта
+  <ключ>/                     сайт
+    README.md                 паспорт: что подключено, особенности, где задачи
+    content/                  ignore.txt, project.yml — настройки контента и SEO
+    design/                   pages.yml, макеты (JSON); src/ — исходники Figma, не в git
+    frontend/ backend/ integrations/   описания для будущих слоёв
+tests/                        самопроверка кода
+.github/workflows/            пайплайны: Common checks, Design checks, Self-test
+.env.example                  пример переменных для локального запуска
 ```
 
 ## Слои проверок
 
-| Слой | Что проверяет | Где | Статус |
+| Слой | Что проверяет | Код | Статус |
 |---|---|---|---|
-| Контент и SEO | тексты, ссылки, мета-теги, типографика, орфография — обход сайта без браузера | `common/`, этот README | работает: Common checks |
-| Макет | вёрстка против макета Figma | [design/](design/README.md) | работает: Design checks |
-| Фронт | ошибки JS, адаптив, вкладки, карусели, формы — в браузере | [frontend/](frontend/README.md) | каркас |
-| Бэк | коды ответов, скорость, AJAX, отправка форм, полнота данных — HTTP-запросами | [backend/](backend/README.md) | каркас |
-| Интеграции | карта, счётчики, доставка заявок, почта домена, соцсети | [integrations/](integrations/README.md) | каркас |
+| Контент и SEO | тексты, ссылки, мета-теги, типографика, орфография — обход сайта без браузера | `checks/content/`, этот README | работает: Common checks |
+| Макет | вёрстка против макета Figma | [checks/design/](checks/design/README.md) | работает: Design checks |
+| Фронт | ошибки JS, адаптив, вкладки, карусели, формы — в браузере | [checks/frontend/](checks/frontend/README.md) | каркас |
+| Бэк | коды ответов, скорость, AJAX, отправка форм, полнота данных — HTTP-запросами | [checks/backend/](checks/backend/README.md) | каркас |
+| Интеграции | карта, счётчики, доставка заявок, почта домена, соцсети | [checks/integrations/](checks/integrations/README.md) | каркас |
 
-Какие сайты подключены и какие слои у каждого — в [projects/README.md](projects/README.md). У каждого сайта своя папка с паспортом и своя метка `site:<ключ>` в Issues.
+Какие сайты подключены и какие слои у каждого — в [sites/README.md](sites/README.md). У каждого сайта своя папка с паспортом и своя метка `site:<ключ>` в Issues.
 
-Все слои устроены одинаково: код — в папке слоя и `common/sitecheck/`, описание того, что проверять на сайте, — в `projects/<ключ>/<слой>/`, адрес сайта — в секрете `SITE_<КЛЮЧ>`, отчёт — в общем формате.
+Слой называется одинаково в обеих частях: `checks/design/` — код сверки, `sites/innotech/design/` — макеты Иннотеха.
 
 ## Что проверяется
 
@@ -105,9 +108,9 @@ tests/                    самопроверка правил
 | `exclude=calendar/\?date=` | регэксп адресов, которые не обходить |
 | `workers=2` | параллельных проверок ссылок |
 
-Объёмные настройки (исключения орфографии, уровни правил) кладутся в `projects/<ключ>/project.yml` под тем же ключом. Адреса в этом файле нет.
+Объёмные настройки (исключения орфографии, уровни правил) кладутся в `sites/<ключ>/content/project.yml` под тем же ключом. Адреса в этом файле нет.
 
-Порядок важности: флаги → `MAX_PAGES` / `MAX_RPS` / `CHECKS` → опции сайта (`SITE_<КЛЮЧ>` / `SITES`) → `projects/<ключ>/project.yml` → умолчания.
+Порядок важности: флаги → `MAX_PAGES` / `MAX_RPS` / `CHECKS` → опции сайта (`SITE_<КЛЮЧ>` / `SITES`) → `sites/<ключ>/content/project.yml` → умолчания.
 
 ## Запуск у себя
 
@@ -115,11 +118,11 @@ tests/                    самопроверка правил
 python3 -m venv venv && ./venv/bin/pip install -r requirements.txt
 cp .env.example .env                       # список сайтов; .env в git не попадает
 
-./venv/bin/python common/run_checks.py                                   # все сайты из SITE_*
-SITE=site-a ./venv/bin/python common/run_checks.py                       # один сайт
-SITE=https://example.ru/ MAX_PAGES=30 ./venv/bin/python common/run_checks.py
-SITE=site-a CHECKS=links ./venv/bin/python common/run_checks.py          # только ссылки
-./venv/bin/python common/run_checks.py --list                            # какие сайты возьмутся
+./venv/bin/python checks/content/run_checks.py                                   # все сайты из SITE_*
+SITE=site-a ./venv/bin/python checks/content/run_checks.py                       # один сайт
+SITE=https://example.ru/ MAX_PAGES=30 ./venv/bin/python checks/content/run_checks.py
+SITE=site-a CHECKS=links ./venv/bin/python checks/content/run_checks.py          # только ссылки
+./venv/bin/python checks/content/run_checks.py --list                            # какие сайты возьмутся
 python3 -m unittest discover tests                                       # самопроверка
 ```
 
@@ -131,10 +134,10 @@ python3 -m unittest discover tests                                       # са�
 
 ```bash
 export SITE=site-a                                            # ключ сайта из .env или любой адрес
-./venv/bin/python common/run_checks.py --stage crawl          # 1. обход → reports/site-a/crawl.json
-./venv/bin/python common/run_checks.py --stage test --only seo         # 2. любой тест, сколько угодно раз
-./venv/bin/python common/run_checks.py --stage test --only typography
-./venv/bin/python common/run_checks.py --stage report         # 3. сводный отчёт по всем прогнанным тестам
+./venv/bin/python checks/content/run_checks.py --stage crawl          # 1. обход → reports/site-a/crawl.json
+./venv/bin/python checks/content/run_checks.py --stage test --only seo         # 2. любой тест, сколько угодно раз
+./venv/bin/python checks/content/run_checks.py --stage test --only typography
+./venv/bin/python checks/content/run_checks.py --stage report         # 3. сводный отчёт по всем прогнанным тестам
 ```
 
 Тесты: `tech`, `seo`, `links`, `spelling`, `typography`. Каждый печатает в терминал, что и где чинить:
@@ -156,7 +159,7 @@ export SITE=site-a                                            # ключ сай�
 | `summary.json` | цифры прогона, из них строится история |
 | `junit.xml` | результат в формате тестов для GitHub Checks |
 
-Словари Hunspell скачиваются при первом запуске в `common/.cache/dict`.
+Словари Hunspell скачиваются при первом запуске в `checks/content/.cache/dict`.
 
 ## Новый сайт
 
@@ -164,11 +167,11 @@ export SITE=site-a                                            # ключ сай�
 
 Своя папка нужна для объёмных настроек: исключения орфографии, уровни правил, параметры проверок.
 
-1. Скопируй `projects/_template` в `projects/<ключ>`. Ключ тот же, что у сайта: для секрета `SITE_SITE_A` это `site-a`.
+1. Скопируй `sites/_template` в `sites/<ключ>`. Ключ тот же, что у сайта: для секрета `SITE_SITE_A` это `site-a`.
 2. Поправь нужные настройки. Адрес и название клиента в файл не пиши.
 3. Закоммить.
 
-Ложные срабатывания орфографии лечатся словами в `projects/<ключ>/ignore.txt`. Например, «технопарк*» со звёздочкой покрывает все формы слова. Слова, общие для всех проектов, пишутся в `common/dictionaries/ignore.txt`.
+Ложные срабатывания орфографии лечатся словами в `sites/<ключ>/content/ignore.txt`. Например, «технопарк*» со звёздочкой покрывает все формы слова. Слова, общие для всех сайтов, пишутся в `checks/content/dictionaries/ignore.txt`.
 
 Проверки, нужные только одному проекту, кладутся в его папку. Пример: форма заявки или калькулятор.
 
@@ -190,7 +193,7 @@ infra ──► tests (site-a) ─┐
 
 Внутри чанка у каждого теста свой лог: `logs/crawl.log`, `logs/links.log` и т. д. Каждое правило теста отдельно видно в Checks (8 правил техники, 11 SEO, 8 ссылок, 1 орфографии, 13 типографики).
 
-Новая общая проверка добавляется так: модуль в `common/sitecheck/`, строка в `CHECKS` в `run_checks.py` и шаг «Тест: …» в этапе tests.
+Новая общая проверка добавляется так: модуль в `checks/content/`, строка в `CHECKS` в `run_checks.py` и шаг «Тест: …» в этапе tests.
 
 Когда запускается:
 
@@ -244,7 +247,7 @@ infra ──► tests (site-a) ─┐
 Итог «seo»: упало 3 из 11 правил: seo.missing_description, seo.missing_h1, seo.img_no_alt
 ▸ 🟠 seo.missing_description — Нет meta description: 10        ← раскрывается
      Как исправить: Заполнить meta description …
-     Правило в коде: common/sitecheck/seo.py:14
+     Правило в коде: checks/content/seo.py:14
      ✘ /mery-podderzhki/
 ```
 
@@ -274,7 +277,7 @@ infra ──► tests (site-a) ─┐
 
 ## Сверка вёрстки с макетом Figma
 
-Отдельный пайплайн **Design checks**, всё описание — в [design/README.md](design/README.md).
+Отдельный пайплайн **Design checks**, всё описание — в [checks/design/README.md](checks/design/README.md).
 
 ## Дальше
 

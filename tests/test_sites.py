@@ -4,9 +4,9 @@ import sys
 import unittest
 from unittest import mock
 
-sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "common"))
+sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))  # корень репозитория
 os.environ.pop("REPORT_FULL_URLS", None)  # тесты режима по умолчанию; полные адреса — в своём тесте
-from sitecheck import sites  # noqa: E402
+from checks.core import sites  # noqa: E402
 
 
 class SitesTest(unittest.TestCase):
@@ -67,7 +67,7 @@ class SitesTest(unittest.TestCase):
         env = {k: v for k, v in os.environ.items() if not k.startswith("SITE")}
         env["SECRETS_JSON"] = json.dumps({"SITE_A": "https://a.ru/ max_pages=5", "github_token": "x",
                                           "OTHER": "https://leak.ru/"})
-        script = os.path.join(os.path.dirname(__file__), "..", "common", "list_sites.py")
+        script = os.path.join(os.path.dirname(__file__), "..", "checks", "core", "list_sites.py")
         out = json.loads(subprocess.run([sys.executable, script], env=env, capture_output=True,
                                         text=True, check=True).stdout)
         self.assertEqual(out, [{"key": "a", "secret": "SITE_A", "url": ""}])

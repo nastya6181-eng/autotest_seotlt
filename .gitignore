@@ -1,5 +1,5 @@
 reports/
-common/.cache/
+checks/content/.cache/
 __pycache__/
 *.pyc
 venv/
@@ -7,4 +7,4 @@ venv/
 .DS_Store
 .env
 # исходники макетов Figma (SVG десятки МБ) — локально или на общем диске, в git только подготовленный JSON
-projects/*/design/src/
+sites/*/design/src/

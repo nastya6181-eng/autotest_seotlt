@@ -6,9 +6,9 @@ import os
 import sys
 import unittest
 
-sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "common"))
-from sitecheck.links import normalize  # noqa: E402
-from sitecheck.typography import PATTERNS  # noqa: E402
+sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))  # корень репозитория
+from checks.content.links import normalize  # noqa: E402
+from checks.content.typography import PATTERNS  # noqa: E402
 
 
 def hits(rule, text):
