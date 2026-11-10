@@ -39,6 +39,11 @@ class ExtractTest(unittest.TestCase):
         self.assertEqual((body["lines"], body["line_height"], body["letter_spacing_px"]), (2, 24.0, 0.16))
 
 
+    def test_runs_on_one_baseline_join_without_space(self):
+        svg = ('<svg width="800"><text font-size="16"><tspan x="10" y="20">Open</tspan><tspan x="50" y="20">AI </tspan>'
+               '<tspan x="80" y="20">рядом</tspan><tspan x="10" y="44">вторая строка</tspan></text></svg>')
+        self.assertEqual(design.extract_svg(svg)["texts"][0]["text"], "OpenAI рядом вторая строка")
+
     def test_translate_applied_and_rotation_skipped(self):
         svg = ('<svg width="800"><g transform="translate(200,300)"><text font-size="16"><tspan x="10" y="20">А</tspan>'
                '</text></g><g transform="rotate(90)"><text font-size="16"><tspan x="1" y="1">Б</tspan></text></g></svg>')
@@ -147,6 +152,11 @@ class PageTest(unittest.TestCase):
         results = design.compare(design.match([d("А", 100, 100), d("Б", 100, 2000)],
                                               [s("А", 100, 100), s("Б", 100, 2300)])[0])
         self.assertEqual([r["design"]["text"] for r in results if r["diffs"]], ["Б"])
+
+    def test_whole_page_shift_caught_even_if_first_text_is_low(self):
+        results = design.compare(design.match([d("А", 100, 800), d("Б", 100, 900)],
+                                              [s("А", 100, 1000), s("Б", 100, 1100)])[0])
+        self.assertEqual([r["design"]["text"] for r in results if r["diffs"]], ["А"])
 
     def test_whole_page_shift_is_caught_at_the_top(self):
         results = design.compare(design.match([d("А", 100, 100), d("Б", 100, 200)],

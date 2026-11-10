@@ -9,6 +9,8 @@
                                           целиком, с опциями (её ввели руками, она не секрет)
     python common/list_sites.py --mask    команды ::add-mask:: — спрятать адреса и домены в логах
     python common/list_sites.py --design  только сайты с макетами (projects/<ключ>/design/pages.yml)
+    python common/list_sites.py --design-pages  по элементу на страницу макета (сайт × страница) —
+                                          матрица для параллельной сверки; DESIGN_PAGE оставляет одну
 """
 import json
 import os
@@ -30,6 +32,14 @@ if "--mask" in sys.argv:
             print(f"::add-mask::{value}")
 else:
     selected = sites.select()
+    if "--design-pages" in sys.argv:
+        from sitecheck import design_pages
+        want = os.environ.get("DESIGN_PAGE") or None
+        print(json.dumps([{"key": s["key"], "secret": secret_of.get(s["key"], ""), "url": "", "page": p["name"]}
+                          for s in selected if not s.get("adhoc")
+                          for p in design_pages.load(s["key"])[1] if not want or p["name"] == want],
+                         ensure_ascii=False))
+        sys.exit(0)
     if "--design" in sys.argv:
         selected = [s for s in selected if os.path.exists(os.path.join(sites.PROJECTS, s["key"], "design", "pages.yml"))]
     print(json.dumps([{"key": s["key"], "secret": "" if s.get("adhoc") else secret_of.get(s["key"], ""),

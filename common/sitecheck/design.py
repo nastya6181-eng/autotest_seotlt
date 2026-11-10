@@ -23,17 +23,24 @@ def normalize(text):
     return re.sub(r"\s+", " ", text).strip().casefold()
 
 
-def join_lines(lines):
-    out = ""
-    for line in lines:
-        line = line.strip()
-        if not out:
-            out = line
-        elif out.endswith("-"):
-            out += line  # перенос «научно-» + «исследовательских»
+def join_lines(lines, ys=None):
+    """Склеить tspan в текст. На одной базовой линии — это куски одной строки с разным стилем
+    (жирное слово), их пробелы уже внутри; на разных — переносы строк."""
+    out, prev_y = "", None
+    for i, raw in enumerate(lines):
+        y = ys[i] if ys else None
+        if out and y is not None and prev_y is not None and abs(y - prev_y) < 0.5:
+            out += raw  # та же строка: «Open» + «AI» → «OpenAI», «научно » + «исследование» как есть
         else:
-            out += " " + line
-    return out
+            line = raw.strip()
+            if not out:
+                out = line
+            elif out.endswith("-"):
+                out += line  # перенос «научно-» + «исследовательских»
+            else:
+                out = out.rstrip() + " " + line
+        prev_y = y
+    return out.strip()
 
 
 TAG_RE = re.compile(r"<(/?)(g|text)\b([^>]*?)(/?)>")
@@ -87,7 +94,7 @@ def extract_svg(svg_text):
         lines = [html.unescape(t) for _, t in spans]
         xs = [float(attr(a, "x", "0")) + offset[0] for a, _ in spans]
         ys = [float(attr(a, "y", "0")) + offset[1] for a, _ in spans]
-        text = join_lines(lines)
+        text = join_lines(lines, ys)
         if not text.strip():
             continue
         line_ys = sorted(set(round(y, 2) for y in ys))
@@ -141,7 +148,9 @@ COLLECT_JS = r"""
     const s = getComputedStyle(el);
     ctx.font = `${s.fontStyle} ${s.fontWeight} ${s.fontSize} ${s.fontFamily}`;
     const asc = ctx.measureText(text.slice(0, 50)).fontBoundingBoxAscent;
-    const lineTops = [...new Set(rects.map(r => Math.round(r.top)))];
+    // строки — группы прямоугольников с близким верхом: span с другим шрифтом в той же строке не новая строка
+    const lineTops = rects.map(r => r.top).sort((a, b) => a - b)
+      .reduce((acc, t) => (acc.length && t - acc[acc.length - 1] < first.height * 0.6 ? acc : [...acc, t]), []);
     const right = Math.max(...rects.map(r => r.right));
     const left = Math.min(...rects.map(r => r.left));
     const offscreen = right <= 0 || left >= innerWidth;  // слайд карусели за краем, скрытое меню
@@ -166,7 +175,7 @@ def rgb_to_hex(css):
     if not m:
         return (css or "").upper()
     r, g, b = (int(x) for x in m.groups()[:3])
-    if m.group(4) is not None and float(m.group(4)) == 0:
+    if m.group(4) is not None and float(m.group(4)) <= 0.1:
         return "TRANSPARENT"  # невидимый текст не должен проходить проверку цвета
     return f"#{r:02X}{g:02X}{b:02X}"
 
@@ -264,7 +273,7 @@ def compare(pairs, tol=TOL_PX):
             gap_d, gap_s = d["y"] - above[0]["y"], s["y"] - above[1]["y"]
             if abs(round(gap_d) - round(gap_s)) > tol:
                 diffs.append(("gap", f"отступ от «{above[0]['text'][:40]}»", round(gap_d), round(gap_s)))
-        elif d["y"] < NEIGHBOUR_PX and abs(round(d["y"]) - round(s["y"])) > tol:  # верх страницы: ловит сдвиг всей страницы
+        elif (i == 0 or d["y"] < NEIGHBOUR_PX) and abs(round(d["y"]) - round(s["y"])) > tol:  # верх страницы: ловит сдвиг всей страницы
             diffs.append(("gap", "отступ от верха страницы", round(d["y"]), round(s["y"])))
         results.append({"design": d, "site": s, "diffs": diffs})
     return results

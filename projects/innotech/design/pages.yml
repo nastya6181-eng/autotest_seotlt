@@ -8,9 +8,11 @@
 #
 # tolerance — допуск по положению в px (левый край, отступы): сдвиги в его пределах — норма.
 # Без него — 2 px. Разово перекрывается переменной DESIGN_TOLERANCE_PX / полем при ручном запуске.
-- page: /
+- name: main
+  page: /
   width: 1600
   design: main-1600.json
+  source: src/main-1600.svg
   tolerance: 2
   dynamic:
     - [880, 1320]               # новости: карточки меняются каждый день

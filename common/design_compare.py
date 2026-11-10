@@ -20,10 +20,9 @@ import sys
 import time
 from urllib.parse import urljoin
 
-import yaml
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
-from sitecheck import design, report, sites  # noqa: E402
+from sitecheck import design, design_pages, report, sites  # noqa: E402
 from sitecheck.findings import make  # noqa: E402
 
 FAIL_ON = ["error", "warning"]
@@ -73,16 +72,8 @@ def collect(browser, url, width):
         page.close()
 
 
-def design_pages(key):
-    path = os.path.join(sites.PROJECTS, key, "design", "pages.yml")
-    if not os.path.exists(path):
-        return None, []
-    with open(path, encoding="utf-8") as f:
-        return os.path.dirname(path), yaml.safe_load(f) or []
-
-
-def check_site(browser, site, out_root):
-    folder, pages = design_pages(site["key"])
+def check_site(browser, site, out_root, page_name=None):
+    folder, pages = design_pages.select(site["key"], page_name)
     rules = {f"design.{r}": v for r, v in design.RULES.items()}
     finding = make("design", design.RULES, {})
     started, findings, lines, texts = time.time(), [], [], 0
@@ -99,20 +90,22 @@ def check_site(browser, site, out_root):
         lines.append(f"{p['page']} ({width:.0f}, допуск ±{tol:g} px): текстов в макете {st['texts']}, "
                      f"динамических пропущено {st['dynamic']}, сопоставлено {st['matched']}, "
                      f"в другом месте {st['moved']}, не найдено {st['missing']}")
-    meta = {"project": site["key"], "project_key": site["key"], "url": site["url"],
+    label = f"{site['key']} · {page_name}" if page_name else site["key"]
+    meta = {"project": label, "project_key": label.replace(" · ", "-"), "url": site["url"],
             "started_at": dt.datetime.fromtimestamp(started, dt.timezone.utc).strftime("%Y-%m-%d %H:%M UTC"),
             "duration_s": round(time.time() - started), "pages": len(pages), "pages_failed": 0,
             "urls_checked": texts, "run_url": os.environ.get("RUN_URL", ""),
             "note": "Допуск по положению (левый край, отступы): "
                     + ", ".join(sorted({f"±{tolerance(p):g} px" for p in pages})) + "; стиль сравнивается точно."}
-    summary = report.write_all(os.path.join(out_root, f"{site['key']}-design"), meta, findings, rules, FAIL_ON)
+    out = f"{site['key']}-design" + (f"-{page_name}" if page_name else "")
+    summary = report.write_all(os.path.join(out_root, out), meta, findings, rules, FAIL_ON)
     print("\n".join(["Покрытие:"] + [f"  {x}" for x in lines]), file=sys.stderr)
     print(report.format_test_log("макет", rules, findings, FAIL_ON, base=site["url"]), file=sys.stderr)
     return 1 if summary["failed"] else 0
 
 
 def with_design(selected):
-    return [s for s in selected if design_pages(s["key"])[0]]
+    return [s for s in selected if design_pages.load(s["key"])[0]]
 
 
 def cmd_run(args):
@@ -122,7 +115,7 @@ def cmd_run(args):
     from playwright.sync_api import sync_playwright
     with sync_playwright() as pw:
         browser = pw.chromium.launch(executable_path=os.environ.get("CHROME_PATH") or None)
-        codes = [check_site(browser, s, args.out) for s in targets]
+        codes = [check_site(browser, s, args.out, args.page) for s in targets]
         browser.close()
     sys.exit(max(codes))
 
@@ -130,6 +123,22 @@ def cmd_run(args):
 def cmd_list(args):
     """Ключи сайтов с макетами — для матрицы пайплайна. Адресов не печатает."""
     print(json.dumps([s["key"] for s in with_design(sites.select(args.site))]))
+
+
+def cmd_prepare(args):
+    """Перегенерировать JSON макетов из исходников src/*.svg — после того как дизайнер обновил макет."""
+    keys = [args.site] if args.site else sorted(d for d in os.listdir(sites.PROJECTS) if design_pages.load(d)[0])
+    for key in keys:
+        print(f"{key}:")
+        print("\n".join(design_pages.prepare(key)) or "  страниц нет")
+
+
+def cmd_add(args):
+    """Завести страницу: SVG (и PNG) из Figma → src/, JSON, запись в pages.yml."""
+    stem, data = design_pages.add(args.site, args.name, args.page, args.svg, args.png)
+    print(f"Страница {args.name} ({args.page}) добавлена: {stem}.json — текстов {len(data['texts'])}, "
+          f"ширина {data['width']:.0f}.\nДальше: отметь динамические зоны в pages.yml и прогони "
+          f"SITE={args.site} DESIGN_PAGE={args.name} python common/design_compare.py run")
 
 
 def main():
@@ -144,8 +153,20 @@ def main():
                             ("list", cmd_list, "ключи сайтов с макетами (для матрицы)")):
         c = sub.add_parser(name, help=help_)
         c.add_argument("--site", default=os.environ.get("SITE"), help="ключ или адрес (по умолчанию $SITE)")
+        c.add_argument("--page", default=os.environ.get("DESIGN_PAGE") or None,
+                       help="только эта страница из pages.yml (по умолчанию $DESIGN_PAGE; пусто — все)")
         c.add_argument("--out", default=os.path.join(sites.ROOT, "reports"))
         c.set_defaults(fn=fn)
+    pr = sub.add_parser("prepare", help="перегенерировать JSON из src/*.svg")
+    pr.add_argument("--site", help="ключ сайта (пусто — все сайты с макетами)")
+    pr.set_defaults(fn=cmd_prepare)
+    ad = sub.add_parser("add", help="завести новую страницу из SVG Figma")
+    ad.add_argument("--site", required=True, help="ключ сайта, например innotech")
+    ad.add_argument("--name", required=True, help="имя страницы латиницей, например catalog")
+    ad.add_argument("--page", required=True, help="путь на сайте, например /catalog/")
+    ad.add_argument("--svg", required=True, help="SVG фрейма из Figma (Outline text выключен)")
+    ad.add_argument("--png", help="PNG того же фрейма — для людей, кладётся рядом")
+    ad.set_defaults(fn=cmd_add)
     args = ap.parse_args()
     args.fn(args)
 

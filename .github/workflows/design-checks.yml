@@ -1,6 +1,6 @@
 # Сверка вёрстки с макетами Figma — отдельный пайплайн, только ручной запуск.
-#   infra  — самопроверка, список сайтов: секреты SITE_<КЛЮЧ>, у которых есть projects/<ключ>/design/pages.yml
-#   tests  — чанк на сайт: браузер на ширине макета, сравнение текстов (шрифт, цвет, переносы, отступы)
+#   infra  — самопроверка, матрица «сайт × страница»: секреты SITE_<КЛЮЧ> × страницы из projects/<ключ>/design/pages.yml
+#   tests  — чанк на каждую страницу, параллельно: браузер на ширине макета, сравнение текстов
 #   logs   — сборщик: общая таблица, Checks
 # Макеты — JSON, извлечённый из SVG-экспорта Figma (common/design_compare.py extract), лежит в репозитории.
 name: Design checks
@@ -11,6 +11,9 @@ on:
       site:
         description: "Ключ сайта (секрет SITE_<КЛЮЧ>) или all"
         default: all
+      page:
+        description: "Только эта страница (name из pages.yml); пусто — все"
+        default: ""
       tolerance:
         description: "Допуск по положению, px (пусто — из pages.yml или 2)"
         default: ""
@@ -45,33 +48,37 @@ jobs:
       - run: pip install -r requirements.txt
       - name: Самопроверка
         run: python -m unittest discover -v tests
-      - name: Сайты с макетами
+      - name: Страницы с макетами
         id: sites
         env:
           SECRETS_JSON: ${{ toJSON(secrets) }}
           SITE: ${{ inputs.site || 'all' }}
+          DESIGN_PAGE: ${{ inputs.page }}
         run: |
           python common/list_sites.py --mask
-          keys=$(python common/list_sites.py --design)
-          [ "$keys" != "[]" ] || { echo "::error::Нет сайтов с макетами: нужен projects/<ключ>/design/pages.yml и секрет SITE_<КЛЮЧ>"; exit 1; }
-          echo "$keys" | jq -r '"Сайтов с макетами: \(length) — " + (map(.key) | join(", "))'
-          echo "sites=$keys" >> "$GITHUB_OUTPUT"
+          pages=$(python common/list_sites.py --design-pages)
+          [ "$pages" != "[]" ] || { echo "::error::Нет страниц: нужен секрет SITE_<КЛЮЧ> и projects/<ключ>/design/pages.yml (или нет страницы «$DESIGN_PAGE»)"; exit 1; }
+          echo "$pages" | jq -r '"Страниц: \(length) — " + (map("\(.key) · \(.page)") | join(", "))'
+          echo "sites=$pages" >> "$GITHUB_OUTPUT"
 
   tests:
     needs: infra
-    name: design (${{ matrix.site.key }})
+    name: design (${{ matrix.site.key }} · ${{ matrix.site.page }})
     runs-on: ${{ vars.RUNNER || 'ubuntu-latest' }}
     timeout-minutes: 30
     strategy:
       fail-fast: false
+      # сколько страниц проверять одновременно — переменная репозитория DESIGN_PARALLEL (по умолчанию 4)
+      max-parallel: ${{ fromJSON(vars.DESIGN_PARALLEL || '4') }}
       matrix:
         site: ${{ fromJson(needs.infra.outputs.sites) }}
     env:
       # чанк получает только секрет своего сайта
       SITES: ${{ matrix.site.secret && format('{0}={1}', matrix.site.key, secrets[matrix.site.secret]) || '' }}
       SITE: ${{ matrix.site.key }}
+      DESIGN_PAGE: ${{ matrix.site.page }}
       DESIGN_TOLERANCE_PX: ${{ inputs.tolerance }}
-      OUT: reports/${{ matrix.site.key }}-design
+      OUT: reports/${{ matrix.site.key }}-design-${{ matrix.site.page }}
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
@@ -92,7 +99,7 @@ jobs:
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: design-${{ matrix.site.key }}
+          name: design-${{ matrix.site.key }}-${{ matrix.site.page }}
           path: ${{ env.OUT }}
           retention-days: 90
       - name: Сводка на странице прогона
@@ -101,7 +108,7 @@ jobs:
           ARTIFACT_URL: ${{ steps.artifact.outputs.artifact-url }}
         run: |
           {
-            cat "$OUT/summary.md" 2>/dev/null || echo "### ❌ ${{ matrix.site.key }}: отчёта нет — см. шаг «Тест: макет»"
+            cat "$OUT/summary.md" 2>/dev/null || echo "### ❌ ${{ matrix.site.key }} · ${{ matrix.site.page }}: отчёта нет — см. шаг «Тест: макет»"
             echo
             echo "Лог сверки — шаг «Тест: макет». Все отличия одной таблицей: [findings.csv](${ARTIFACT_URL})."
           } >> "$GITHUB_STEP_SUMMARY"
