@@ -3,10 +3,10 @@
 
 1. Выгрузить фрейм из Figma: Export → SVG (Outline text — выключено, 1x).
 2. Извлечь из SVG тексты в компактный JSON (сам SVG большой, в репозиторий не кладём):
-       python common/design_compare.py extract Главная.svg projects/<ключ>/design/main-1600.json
+       python design/design_compare.py extract Главная.svg projects/<ключ>/design/main-1600.json
 3. Описать страницу в projects/<ключ>/design/pages.yml (путь, ширина, файл макета, динамические зоны).
 4. Прогнать — сайты те же, что у общих проверок (SITE_<КЛЮЧ>, SITE):
-       SITE=<ключ> python common/design_compare.py run
+       SITE=<ключ> python design/design_compare.py run
    Отчёты — в reports/<ключ>-design/, в том же формате, что у общих проверок.
 
 Нужен Playwright: pip install -r requirements-design.txt && python -m playwright install chromium
@@ -21,7 +21,7 @@ import time
 from urllib.parse import urljoin
 
 
-sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+sys.path.insert(0, os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "common"))
 from sitecheck import design, design_pages, report, sites  # noqa: E402
 from sitecheck.findings import make  # noqa: E402
 
@@ -84,7 +84,13 @@ def check_site(browser, site, out_root, page_name=None):
         width = p.get("width", data["width"])
         url = urljoin(site["url"], p["page"])
         tol = tolerance(p)
-        found, st = design.check_page(data, collect(browser, url, width), url, p.get("dynamic", []), finding, tol)
+        try:
+            found, st = design.check_page(data, collect(browser, url, width), url, p.get("dynamic", []), finding, tol)
+        except design.EmptyDesign as e:
+            print(f"✘ {p['name']} ({p['design']}): {e}", file=sys.stderr)
+            if os.environ.get("GITHUB_ACTIONS") == "true":
+                print(f"::error title=Макет {p['name']}::{e}", file=sys.stderr)
+            return 2
         findings += found
         texts += st["matched"]
         lines.append(f"{p['page']} ({width:.0f}, допуск ±{tol:g} px): текстов в макете {st['texts']}, "
@@ -138,7 +144,7 @@ def cmd_add(args):
     stem, data = design_pages.add(args.site, args.name, args.page, args.svg, args.png)
     print(f"Страница {args.name} ({args.page}) добавлена: {stem}.json — текстов {len(data['texts'])}, "
           f"ширина {data['width']:.0f}.\nДальше: отметь динамические зоны в pages.yml и прогони "
-          f"SITE={args.site} DESIGN_PAGE={args.name} python common/design_compare.py run")
+          f"SITE={args.site} DESIGN_PAGE={args.name} python design/design_compare.py run")
 
 
 def main():

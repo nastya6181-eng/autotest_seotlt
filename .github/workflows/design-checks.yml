@@ -2,7 +2,7 @@
 #   infra  — самопроверка, матрица «сайт × страница»: секреты SITE_<КЛЮЧ> × страницы из projects/<ключ>/design/pages.yml
 #   tests  — чанк на каждую страницу, параллельно: браузер на ширине макета, сравнение текстов
 #   logs   — сборщик: общая таблица, Checks
-# Макеты — JSON, извлечённый из SVG-экспорта Figma (common/design_compare.py extract), лежит в репозитории.
+# Макеты — JSON, извлечённый из SVG-экспорта Figma (design/design_compare.py extract), лежит в репозитории.
 name: Design checks
 
 on:
@@ -93,7 +93,7 @@ jobs:
       - name: "Тест: макет"
         run: |
           mkdir -p "$OUT/logs"
-          python common/design_compare.py run 2>&1 | tee "$OUT/logs/design.log"
+          python design/design_compare.py run 2>&1 | tee "$OUT/logs/design.log"
       - name: Результаты чанка
         id: artifact
         if: always()

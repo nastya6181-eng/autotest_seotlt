@@ -86,6 +86,31 @@ class CompareTest(unittest.TestCase):
         self.assertEqual({x[0] for x in r["diffs"]}, {"font_size", "font_weight", "color", "left"})
 
 
+class StrictnessTest(unittest.TestCase):
+    def test_empty_design_is_an_error_not_a_pass(self):
+        with self.assertRaises(design.EmptyDesign):
+            design.check_page({"width": 1600, "texts": []}, [s("Любой", 0, 0)], "https://x.ru/", [],
+                              make("design", design.RULES, {}))
+
+    def test_text_without_tspan(self):
+        data = design.extract_svg('<svg width="800"><text x="10" y="20" font-size="16">Заголовок</text></svg>')
+        self.assertEqual([(t["text"], t["x"], t["y"]) for t in data["texts"]], [("Заголовок", 10.0, 20.0)])
+
+    def test_font_family_exact(self):
+        r = design.compare([(d("Т", 10, 10), s("Т", 10, 10, font_family='"Montserrat Alternates", sans-serif'))])[0]
+        self.assertIn("font_family", [x[0] for x in r["diffs"]])
+        r = design.compare([(d("Т", 10, 10), s("Т", 10, 10, font_family='"Montserrat", sans-serif'))])[0]
+        self.assertNotIn("font_family", [x[0] for x in r["diffs"]])
+
+    def test_semi_transparent_color_differs(self):
+        r = design.compare([(d("Т", 10, 10), s("Т", 10, 10, color="rgba(255, 255, 255, 0.11)"))])[0]
+        self.assertEqual([x[2:] for x in r["diffs"] if x[0] == "color"], [("#FFFFFF", "#FFFFFF 11%")])
+        r = design.compare([(d("Т", 10, 10, color="#FFFFFF 80%"), s("Т", 10, 10, opacity=0.8))])[0]
+        self.assertNotIn("color", [x[0] for x in r["diffs"]])  # opacity у элемента = тот же полупрозрачный цвет
+        svg = '<svg width="800"><text fill="white" fill-opacity="0.5" font-size="16"><tspan x="1" y="1">А</tspan></text></svg>'
+        self.assertEqual(design.extract_svg(svg)["texts"][0]["color"], "#FFFFFF 50%")
+
+
 class ToleranceTest(unittest.TestCase):
     def shifted(self, dx, dy, tol):
         pairs = design.match([d("А", 100, 100), d("Б", 100, 200)], [s("А", 100, 100), s("Б", 100 + dx, 200 + dy)])[0]
@@ -110,7 +135,7 @@ class ToleranceTest(unittest.TestCase):
 
     def test_tolerance_precedence(self):
         from unittest import mock
-        sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "common"))
+        sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "design"))
         import design_compare
         with mock.patch.dict(os.environ, {"DESIGN_TOLERANCE_PX": ""}):
             self.assertEqual(design_compare.tolerance({}), 2)

@@ -227,7 +227,7 @@
    "font_size": 14.0,
    "font_weight": 500,
    "letter_spacing_px": -0.14,
-   "color": "#FFFFFF"
+   "color": "#FFFFFF 70%"
   },
   {
    "text": "9 февраля 2026",
@@ -299,7 +299,7 @@
    "font_size": 14.0,
    "font_weight": 500,
    "letter_spacing_px": -0.14,
-   "color": "#FFFFFF"
+   "color": "#FFFFFF 70%"
   },
   {
    "text": "9 февраля 2026",
@@ -995,7 +995,7 @@
    "font_size": 14.0,
    "font_weight": 500,
    "letter_spacing_px": -0.14,
-   "color": "#1B2321"
+   "color": "#1B2321 60%"
   },
   {
    "text": "158 м",
@@ -1031,7 +1031,7 @@
    "font_size": 14.0,
    "font_weight": 500,
    "letter_spacing_px": -0.14,
-   "color": "#1B2321"
+   "color": "#1B2321 60%"
   },
   {
    "text": "до 152 человек",
@@ -1103,7 +1103,7 @@
    "font_size": 14.0,
    "font_weight": 500,
    "letter_spacing_px": -0.14,
-   "color": "#1B2321"
+   "color": "#1B2321 60%"
   },
   {
    "text": "40 м",
@@ -1139,7 +1139,7 @@
    "font_size": 14.0,
    "font_weight": 500,
    "letter_spacing_px": -0.14,
-   "color": "#1B2321"
+   "color": "#1B2321 60%"
   },
   {
    "text": "до 25 человек",
@@ -1211,7 +1211,7 @@
    "font_size": 14.0,
    "font_weight": 500,
    "letter_spacing_px": -0.14,
-   "color": "#1B2321"
+   "color": "#1B2321 60%"
   },
   {
    "text": "30.5 м",
@@ -1247,7 +1247,7 @@
    "font_size": 14.0,
    "font_weight": 500,
    "letter_spacing_px": -0.14,
-   "color": "#1B2321"
+   "color": "#1B2321 60%"
   },
   {
    "text": "до 10 человек",
@@ -1463,7 +1463,7 @@
    "font_size": 12.0,
    "font_weight": 500,
    "letter_spacing_px": -0.12,
-   "color": "#FFFFFF"
+   "color": "#FFFFFF 60%"
   },
   {
    "text": "Разработка и поддержка цифровых проектов для бизнеса и госсектора",
@@ -1475,7 +1475,7 @@
    "font_size": 12.0,
    "font_weight": 500,
    "letter_spacing_px": -0.12,
-   "color": "#FFFFFF"
+   "color": "#FFFFFF 60%"
   },
   {
    "text": "Эксперты в области создания специализированных изделий и одежды",
@@ -1487,7 +1487,7 @@
    "font_size": 12.0,
    "font_weight": 500,
    "letter_spacing_px": -0.12,
-   "color": "#FFFFFF"
+   "color": "#FFFFFF 60%"
   },
   {
    "text": "Разработка оптических фильтров и еехнологий",
@@ -1499,7 +1499,7 @@
    "font_size": 12.0,
    "font_weight": 500,
    "letter_spacing_px": -0.12,
-   "color": "#FFFFFF"
+   "color": "#FFFFFF 60%"
   },
   {
    "text": "Разрабатывает и сертифицирует ПО и программно-аппаратные комплексы",
@@ -1511,7 +1511,7 @@
    "font_size": 12.0,
    "font_weight": 500,
    "letter_spacing_px": -0.12,
-   "color": "#FFFFFF"
+   "color": "#FFFFFF 60%"
   },
   {
    "text": "Разработчик самоходных тележек для перевозки грузов",
@@ -1523,7 +1523,7 @@
    "font_size": 12.0,
    "font_weight": 500,
    "letter_spacing_px": -0.12,
-   "color": "#FFFFFF"
+   "color": "#FFFFFF 60%"
   },
   {
    "text": "Цифровые решения для промышленности и логистики",
@@ -1535,7 +1535,7 @@
    "font_size": 12.0,
    "font_weight": 500,
    "letter_spacing_px": -0.12,
-   "color": "#FFFFFF"
+   "color": "#FFFFFF 60%"
   },
   {
    "text": "Разработка ПАК для молочных фермерских хозяйств",
@@ -1547,7 +1547,7 @@
    "font_size": 12.0,
    "font_weight": 500,
    "letter_spacing_px": -0.12,
-   "color": "#FFFFFF"
+   "color": "#FFFFFF 60%"
   },
   {
    "text": "Проектирование и производство систем радиационного контроля",
@@ -1559,7 +1559,7 @@
    "font_size": 12.0,
    "font_weight": 500,
    "letter_spacing_px": -0.12,
-   "color": "#FFFFFF"
+   "color": "#FFFFFF 60%"
   },
   {
    "text": "Разработки в области биотехнологии",
@@ -1571,7 +1571,7 @@
    "font_size": 12.0,
    "font_weight": 500,
    "letter_spacing_px": -0.12,
-   "color": "#FFFFFF"
+   "color": "#FFFFFF 60%"
   },
   {
    "text": "БОЛЕЕ",
@@ -1979,7 +1979,7 @@
    "font_size": 12.0,
    "font_weight": 500,
    "letter_spacing_px": -0.12,
-   "color": "#FFFFFF"
+   "color": "#FFFFFF 80%"
   },
   {
    "text": "13",
@@ -2003,7 +2003,7 @@
    "font_size": 12.0,
    "font_weight": 500,
    "letter_spacing_px": -0.12,
-   "color": "#FFFFFF"
+   "color": "#FFFFFF 80%"
   },
   {
    "text": "14",
@@ -2075,7 +2075,7 @@
    "font_size": 12.0,
    "font_weight": 500,
    "letter_spacing_px": -0.12,
-   "color": "#FFFFFF"
+   "color": "#FFFFFF 80%"
   },
   {
    "text": "17",
@@ -2099,7 +2099,7 @@
    "font_size": 12.0,
    "font_weight": 500,
    "letter_spacing_px": -0.12,
-   "color": "#FFFFFF"
+   "color": "#FFFFFF 80%"
   },
   {
    "text": "18",
@@ -2123,7 +2123,7 @@
    "font_size": 12.0,
    "font_weight": 500,
    "letter_spacing_px": -0.12,
-   "color": "#FFFFFF"
+   "color": "#FFFFFF 80%"
   },
   {
    "text": "19",
@@ -2147,7 +2147,7 @@
    "font_size": 12.0,
    "font_weight": 500,
    "letter_spacing_px": -0.12,
-   "color": "#FFFFFF"
+   "color": "#FFFFFF 80%"
   },
   {
    "text": "20",
@@ -2171,7 +2171,7 @@
    "font_size": 12.0,
    "font_weight": 500,
    "letter_spacing_px": -0.12,
-   "color": "#FFFFFF"
+   "color": "#FFFFFF 80%"
   },
   {
    "text": "21",
@@ -2243,7 +2243,7 @@
    "font_size": 12.0,
    "font_weight": 500,
    "letter_spacing_px": -0.12,
-   "color": "#FFFFFF"
+   "color": "#FFFFFF 80%"
   },
   {
    "text": "24",
@@ -2267,7 +2267,7 @@
    "font_size": 12.0,
    "font_weight": 500,
    "letter_spacing_px": -0.12,
-   "color": "#FFFFFF"
+   "color": "#FFFFFF 80%"
   },
   {
    "text": "25",
@@ -2291,7 +2291,7 @@
    "font_size": 12.0,
    "font_weight": 500,
    "letter_spacing_px": -0.12,
-   "color": "#FFFFFF"
+   "color": "#FFFFFF 80%"
   },
   {
    "text": "26",
@@ -2315,7 +2315,7 @@
    "font_size": 12.0,
    "font_weight": 500,
    "letter_spacing_px": -0.12,
-   "color": "#FFFFFF"
+   "color": "#FFFFFF 80%"
   },
   {
    "text": "27",
@@ -2339,7 +2339,7 @@
    "font_size": 12.0,
    "font_weight": 500,
    "letter_spacing_px": -0.12,
-   "color": "#FFFFFF"
+   "color": "#FFFFFF 80%"
   },
   {
    "text": "28",
@@ -2411,7 +2411,7 @@
    "font_size": 12.0,
    "font_weight": 500,
    "letter_spacing_px": -0.12,
-   "color": "#FFFFFF"
+   "color": "#FFFFFF 80%"
   },
   {
    "text": "3",
@@ -2435,7 +2435,7 @@
    "font_size": 12.0,
    "font_weight": 500,
    "letter_spacing_px": -0.12,
-   "color": "#FFFFFF"
+   "color": "#FFFFFF 80%"
   },
   {
    "text": "3",
@@ -2459,7 +2459,7 @@
    "font_size": 12.0,
    "font_weight": 500,
    "letter_spacing_px": -0.12,
-   "color": "#FFFFFF"
+   "color": "#FFFFFF 80%"
   },
   {
    "text": "4",
@@ -2483,7 +2483,7 @@
    "font_size": 12.0,
    "font_weight": 500,
    "letter_spacing_px": -0.12,
-   "color": "#FFFFFF"
+   "color": "#FFFFFF 80%"
   },
   {
    "text": "5",
@@ -2507,7 +2507,7 @@
    "font_size": 12.0,
    "font_weight": 500,
    "letter_spacing_px": -0.12,
-   "color": "#FFFFFF"
+   "color": "#FFFFFF 80%"
   },
   {
    "text": "6",
@@ -2579,7 +2579,7 @@
    "font_size": 12.0,
    "font_weight": 500,
    "letter_spacing_px": -0.12,
-   "color": "#FFFFFF"
+   "color": "#FFFFFF 80%"
   },
   {
    "text": "9",
@@ -2603,7 +2603,7 @@
    "font_size": 12.0,
    "font_weight": 500,
    "letter_spacing_px": -0.12,
-   "color": "#FFFFFF"
+   "color": "#FFFFFF 80%"
   },
   {
    "text": "10",
@@ -2627,7 +2627,7 @@
    "font_size": 12.0,
    "font_weight": 500,
    "letter_spacing_px": -0.12,
-   "color": "#FFFFFF"
+   "color": "#FFFFFF 80%"
   },
   {
    "text": "11",
@@ -2651,7 +2651,7 @@
    "font_size": 12.0,
    "font_weight": 500,
    "letter_spacing_px": -0.12,
-   "color": "#FFFFFF"
+   "color": "#FFFFFF 80%"
   },
   {
    "text": "12",
@@ -2675,7 +2675,7 @@
    "font_size": 12.0,
    "font_weight": 500,
    "letter_spacing_px": -0.12,
-   "color": "#FFFFFF"
+   "color": "#FFFFFF 80%"
   },
   {
    "text": "13",
@@ -3059,7 +3059,7 @@
    "font_size": 14.0,
    "font_weight": 400,
    "letter_spacing_px": -0.14,
-   "color": "#FFFFFF"
+   "color": "#FFFFFF 80%"
   },
   {
    "text": "Стартапам",
@@ -3071,7 +3071,7 @@
    "font_size": 14.0,
    "font_weight": 400,
    "letter_spacing_px": -0.14,
-   "color": "#FFFFFF"
+   "color": "#FFFFFF 80%"
   },
   {
    "text": "Бизнесу",
@@ -3083,7 +3083,7 @@
    "font_size": 14.0,
    "font_weight": 400,
    "letter_spacing_px": -0.14,
-   "color": "#FFFFFF"
+   "color": "#FFFFFF 80%"
   },
   {
    "text": "Институты поддержки",
@@ -3095,7 +3095,7 @@
    "font_size": 14.0,
    "font_weight": 400,
    "letter_spacing_px": -0.14,
-   "color": "#FFFFFF"
+   "color": "#FFFFFF 80%"
   },
   {
    "text": "НТР",
@@ -3131,7 +3131,7 @@
    "font_size": 14.0,
    "font_weight": 400,
    "letter_spacing_px": -0.14,
-   "color": "#FFFFFF"
+   "color": "#FFFFFF 80%"
   },
   {
    "text": "Ядерный кластер",
@@ -3143,7 +3143,7 @@
    "font_size": 14.0,
    "font_weight": 400,
    "letter_spacing_px": -0.14,
-   "color": "#FFFFFF"
+   "color": "#FFFFFF 80%"
   },
   {
    "text": "ИКТ-кластер",
@@ -3155,7 +3155,7 @@
    "font_size": 14.0,
    "font_weight": 400,
    "letter_spacing_px": -0.14,
-   "color": "#FFFFFF"
+   "color": "#FFFFFF 80%"
   },
   {
    "text": "Образовательный кластер",
@@ -3167,7 +3167,7 @@
    "font_size": 14.0,
    "font_weight": 400,
    "letter_spacing_px": -0.14,
-   "color": "#FFFFFF"
+   "color": "#FFFFFF 80%"
   },
   {
    "text": "Технологический кластер Территория",
@@ -3179,7 +3179,7 @@
    "font_size": 14.0,
    "font_weight": 400,
    "letter_spacing_px": -0.14,
-   "color": "#FFFFFF"
+   "color": "#FFFFFF 80%"
   },
   {
    "text": "Смотреть еще",
@@ -3215,7 +3215,7 @@
    "font_size": 14.0,
    "font_weight": 400,
    "letter_spacing_px": -0.14,
-   "color": "#FFFFFF"
+   "color": "#FFFFFF 80%"
   },
   {
    "text": "Реестр МТК Калужской области",
@@ -3227,7 +3227,7 @@
    "font_size": 14.0,
    "font_weight": 400,
    "letter_spacing_px": -0.14,
-   "color": "#FFFFFF"
+   "color": "#FFFFFF 80%"
   },
   {
    "text": "Условия преференции",
@@ -3239,7 +3239,7 @@
    "font_size": 14.0,
    "font_weight": 400,
    "letter_spacing_px": -0.14,
-   "color": "#FFFFFF"
+   "color": "#FFFFFF 80%"
   },
   {
    "text": "Технопарк",
@@ -3263,7 +3263,7 @@
    "font_size": 14.0,
    "font_weight": 400,
    "letter_spacing_px": -0.14,
-   "color": "#FFFFFF"
+   "color": "#FFFFFF 80%"
   },
   {
    "text": "Стать резидентом",
@@ -3275,7 +3275,7 @@
    "font_size": 14.0,
    "font_weight": 400,
    "letter_spacing_px": -0.14,
-   "color": "#FFFFFF"
+   "color": "#FFFFFF 80%"
   },
   {
    "text": "Наши резиденты",
@@ -3287,7 +3287,7 @@
    "font_size": 14.0,
    "font_weight": 400,
    "letter_spacing_px": -0.14,
-   "color": "#FFFFFF"
+   "color": "#FFFFFF 80%"
   },
   {
    "text": "Услуги Технопарка",
@@ -3299,7 +3299,7 @@
    "font_size": 14.0,
    "font_weight": 400,
    "letter_spacing_px": -0.14,
-   "color": "#FFFFFF"
+   "color": "#FFFFFF 80%"
   },
   {
    "text": "Аренда конференц-залов",
@@ -3311,7 +3311,7 @@
    "font_size": 14.0,
    "font_weight": 400,
    "letter_spacing_px": -0.14,
-   "color": "#FFFFFF"
+   "color": "#FFFFFF 80%"
   },
   {
    "text": "Контакты",
@@ -3347,7 +3347,7 @@
    "font_size": 14.0,
    "font_weight": 400,
    "letter_spacing_px": -0.14,
-   "color": "#FFFFFF"
+   "color": "#FFFFFF 80%"
   },
   {
    "text": "События",
@@ -3359,7 +3359,7 @@
    "font_size": 14.0,
    "font_weight": 400,
    "letter_spacing_px": -0.14,
-   "color": "#FFFFFF"
+   "color": "#FFFFFF 80%"
   },
   {
    "text": "Команда",
@@ -3371,7 +3371,7 @@
    "font_size": 14.0,
    "font_weight": 400,
    "letter_spacing_px": -0.14,
-   "color": "#FFFFFF"
+   "color": "#FFFFFF 80%"
   },
   {
    "text": "Истории успеха",
@@ -3383,7 +3383,7 @@
    "font_size": 14.0,
    "font_weight": 400,
    "letter_spacing_px": -0.14,
-   "color": "#FFFFFF"
+   "color": "#FFFFFF 80%"
   },
   {
    "text": "Календарь",
@@ -3395,7 +3395,7 @@
    "font_size": 14.0,
    "font_weight": 400,
    "letter_spacing_px": -0.14,
-   "color": "#FFFFFF"
+   "color": "#FFFFFF 80%"
   },
   {
    "text": "АИР",
@@ -3407,7 +3407,7 @@
    "font_size": 14.0,
    "font_weight": 400,
    "letter_spacing_px": -0.14,
-   "color": "#FFFFFF"
+   "color": "#FFFFFF 80%"
   },
   {
    "text": "Технопарк Инно40",

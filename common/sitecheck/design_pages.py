@@ -37,6 +37,8 @@ def load(key):
     names = []
     for p in pages:
         p.setdefault("name", re.sub(r"[^a-z0-9-]+", "-", os.path.splitext(p["design"])[0].lower()).strip("-"))
+        if not isinstance(p.get("page"), str) or not p["page"].startswith("/"):
+            raise SystemExit(f"{path}: у страницы «{p['name']}» page должен быть путём от корня, например /catalog/")
         if not NAME_RE.match(p["name"]):
             raise SystemExit(f"{path}: имя страницы «{p['name']}» — только латиница, цифры и «-»")
         names.append(p["name"])
@@ -80,6 +82,8 @@ def add(key, name, page, svg_path, png_path=None):
     import shutil
     if not NAME_RE.match(name):
         raise SystemExit(f"Имя страницы «{name}» — только латиница, цифры и «-», например catalog")
+    if not page.startswith("/") or "#" in page:
+        raise SystemExit(f"Путь страницы «{page}» должен начинаться с «/» и быть без «#», например /catalog/")
     base = folder(key)
     _, pages = load(key)
     if any(p["name"] == name for p in pages):
@@ -94,7 +98,7 @@ def add(key, name, page, svg_path, png_path=None):
     with open(os.path.join(base, f"{stem}.json"), "w", encoding="utf-8") as f:
         json.dump(data, f, ensure_ascii=False, indent=1)
     path = os.path.join(base, "pages.yml")
-    entry = (f"\n- name: {name}\n  page: {page}\n  width: {data['width']:.0f}\n  design: {stem}.json\n"
+    entry = (f"\n- name: {name}\n  page: {json.dumps(page, ensure_ascii=False)}\n  width: {data['width']:.0f}\n  design: {stem}.json\n"
              f"  source: src/{stem}.svg\n  dynamic: []     # зоны с меняющимся контентом: [y1, y2] или [x1, y1, x2, y2]\n")
     with open(path, "a", encoding="utf-8") as f:
         f.write(entry)

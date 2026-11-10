@@ -89,6 +89,8 @@ def extract_svg(svg_text):
             skipped += 1
             continue
         spans = TSPAN_RE.findall(body)
+        if not spans and body.strip() and not body.lstrip().startswith("<"):
+            spans = [(attrs, body)]  # <text x y>Текст</text> без tspan — координаты на самом <text>
         if not spans:
             continue
         lines = [html.unescape(t) for _, t in spans]
@@ -110,7 +112,8 @@ def extract_svg(svg_text):
             "font_size": fs,
             "font_weight": int(attr(attrs, "font-weight", "400")),
             "letter_spacing_px": round(float(ls[:-2]) * fs, 2) if ls.endswith("em") else float(ls.rstrip("px") or 0),
-            "color": NAMED.get(attr(attrs, "fill", "#000000"), attr(attrs, "fill", "#000000")).upper(),
+            "color": with_alpha(NAMED.get(attr(attrs, "fill", "#000000"), attr(attrs, "fill", "#000000")).upper(),
+                                attr(attrs, "fill-opacity") or attr(attrs, "opacity")),
         })
     return {"width": width, "texts": texts, "skipped_transformed": skipped}
 
@@ -162,7 +165,9 @@ COLLECT_JS = r"""
       font_family: s.fontFamily, font_size: parseFloat(s.fontSize), font_weight: parseInt(s.fontWeight),
       letter_spacing_px: s.letterSpacing === 'normal' ? 0 : parseFloat(s.letterSpacing),
       line_height_px: s.lineHeight === 'normal' ? null : parseFloat(s.lineHeight),
-      color: s.color, text_transform: s.textTransform, depth: (() => { let d = 0, n = el; while (n = n.parentElement) d++; return d; })(),
+      color: s.color, text_transform: s.textTransform,
+      // итоговая прозрачность: opacity элемента и всех предков — полупрозрачность бывает и так, не только rgba
+      opacity: (() => { let o = 1, n = el; while (n && n !== document.documentElement) { o *= +getComputedStyle(n).opacity; n = n.parentElement; } return o; })(), depth: (() => { let d = 0, n = el; while (n = n.parentElement) d++; return d; })(),
     });
   }
   return out;
@@ -170,14 +175,28 @@ COLLECT_JS = r"""
 """
 
 
-def rgb_to_hex(css):
+def with_alpha(hex_color, alpha):
+    """Цвет с прозрачностью: «#FFFFFF» или «#FFFFFF 40%». Полупрозрачный текст — другой цвет, не «почти тот же»."""
+    try:
+        a = float(alpha) if alpha not in (None, "") else 1.0
+    except ValueError:
+        a = 1.0
+    return hex_color if a >= 0.995 else f"{hex_color} {round(a * 100)}%"
+
+
+def rgb_to_hex(css, opacity=1.0):
+    """CSS-цвет → «#RRGGBB» или «#RRGGBB 80%»; opacity — итоговая прозрачность элемента и предков."""
     m = re.match(r"rgba?\((\d+),\s*(\d+),\s*(\d+)(?:,\s*([\d.]+))?", css or "")
     if not m:
         return (css or "").upper()
     r, g, b = (int(x) for x in m.groups()[:3])
-    if m.group(4) is not None and float(m.group(4)) <= 0.1:
-        return "TRANSPARENT"  # невидимый текст не должен проходить проверку цвета
-    return f"#{r:02X}{g:02X}{b:02X}"
+    alpha = (float(m.group(4)) if m.group(4) is not None else 1.0) * (opacity if opacity is not None else 1.0)
+    return with_alpha(f"#{r:02X}{g:02X}{b:02X}", alpha)
+
+
+def family(css_family):
+    """Первая гарнитура из font-family без кавычек: '"Montserrat", sans-serif' → 'montserrat'."""
+    return css_family.split(",")[0].strip().strip("\"'").lower()
 
 
 ALNUM = re.compile(r"[0-9a-zа-яё]", re.I)
@@ -223,6 +242,10 @@ TOL_PX = 2  # допуск по положению по умолчанию; пе
 NEIGHBOUR_PX = 600  # сосед сверху ищется рядом; дальше — это уже другой блок страницы
 
 POSITION_RULES = {"left", "gap"}
+
+
+class EmptyDesign(ValueError):
+    """Макет без текстов — сравнивать нечего, «ошибок нет» было бы ложью."""
 NAME = "design"
 RULES = {
     "missing": ("warning", "Текст из макета не найден на сайте"),
@@ -251,10 +274,10 @@ def compare(pairs, tol=TOL_PX):
             diffs.append(("font_size", "font-size", d["font_size"], s["font_size"]))
         if d["font_weight"] != s["font_weight"]:
             diffs.append(("font_weight", "font-weight", d["font_weight"], s["font_weight"]))
-        if d["font_family"] and d["font_family"].lower() not in s["font_family"].lower().split(",")[0]:
+        if d["font_family"] and family(d["font_family"]) != family(s["font_family"]):
             diffs.append(("font_family", "font-family", d["font_family"], s["font_family"].split(",")[0].strip('"\' ')))
-        if d["color"] != rgb_to_hex(s["color"]):
-            diffs.append(("color", "color", d["color"], rgb_to_hex(s["color"])))
+        if d["color"] != rgb_to_hex(s["color"], s.get("opacity")):
+            diffs.append(("color", "color", d["color"], rgb_to_hex(s["color"], s.get("opacity"))))
         if abs(d["letter_spacing_px"] - s["letter_spacing_px"]) > 0.3:
             diffs.append(("letter_spacing", "letter-spacing", d["letter_spacing_px"], s["letter_spacing_px"]))
         if d["line_height"] and s["line_height_px"] and abs(d["line_height"] - s["line_height_px"]) > 1:
@@ -308,6 +331,9 @@ def match_partial(missing, site, taken):
 
 def check_page(design_data, site, url, zones=(), make=None, tol=TOL_PX):
     """Сравнить одну страницу. Возвращает замечания (Finding) и статистику покрытия."""
+    if not design_data["texts"]:
+        raise EmptyDesign("в макете нет ни одного текста: скорее всего, SVG выгружен с «Outline text» "
+                          "(текст превращён в кривые) — выгрузи фрейм заново с выключенной опцией")
     texts = [t for t in design_data["texts"] if not in_zone(t, zones)]
     pairs, missing, far = match(texts, site)
     taken = {id(s) for _, s in pairs + far}
