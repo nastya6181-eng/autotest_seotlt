@@ -1,0 +1,7 @@
+# Какая страница сайта какому макету соответствует. Адреса — путями, без домена.
+# Макет: Figma → фрейм → Export SVG (Outline text выключен, 1x), затем
+#   python common/design_compare.py extract <файл>.svg projects/innotech/design/<имя>.json
+# Сам SVG в репозиторий не кладём (десятки МБ векторного фона), только извлечённый JSON.
+- page: /
+  width: 1600
+  design: main-1600.json
