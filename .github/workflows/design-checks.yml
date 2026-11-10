@@ -11,6 +11,9 @@ on:
       site:
         description: "Ключ сайта (секрет SITE_<КЛЮЧ>) или all"
         default: all
+      tolerance:
+        description: "Допуск по положению, px (пусто — из pages.yml или 2)"
+        default: ""
 
 permissions:
   contents: read
@@ -67,6 +70,7 @@ jobs:
       # чанк получает только секрет своего сайта
       SITES: ${{ matrix.site.secret && format('{0}={1}', matrix.site.key, secrets[matrix.site.secret]) || '' }}
       SITE: ${{ matrix.site.key }}
+      DESIGN_TOLERANCE_PX: ${{ inputs.tolerance }}
       OUT: reports/${{ matrix.site.key }}-design
     steps:
       - uses: actions/checkout@v4

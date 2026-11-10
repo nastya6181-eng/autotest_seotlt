@@ -81,6 +81,42 @@ class CompareTest(unittest.TestCase):
         self.assertEqual({x[0] for x in r["diffs"]}, {"font_size", "font_weight", "color", "left"})
 
 
+class ToleranceTest(unittest.TestCase):
+    def shifted(self, dx, dy, tol):
+        pairs = design.match([d("А", 100, 100), d("Б", 100, 200)], [s("А", 100, 100), s("Б", 100 + dx, 200 + dy)])[0]
+        return {x[0] for r in design.compare(pairs, tol) for x in r["diffs"]}
+
+    def test_shift_within_tolerance_is_ok(self):
+        self.assertEqual(self.shifted(5, 5, 2), {"left", "gap"})
+        self.assertEqual(self.shifted(5, 5, 10), set())
+        self.assertEqual(self.shifted(12, 12, 10), {"left", "gap"})
+        self.assertEqual(self.shifted(10.4, 10.4, 10), set())  # в отчёте это «±10» — значит, в норме
+
+    def test_style_is_exact_regardless_of_tolerance(self):
+        r = design.compare([(d("Т", 10, 10, font_size=24.0), s("Т", 10, 10, font_size=23.0))], tol=50)[0]
+        self.assertEqual([x[0] for x in r["diffs"]], ["font_size"])
+
+    def test_message_shows_tolerance(self):
+        data = {"width": 1600, "texts": [d("А", 100, 100)]}
+        findings, st = design.check_page(data, [s("А", 115, 100)], "https://x.ru/", [],
+                                         make("design", design.RULES, {}), tol=10)
+        self.assertEqual(st["tolerance"], 10)
+        self.assertIn("допуск ±10", findings[0].message)
+
+    def test_tolerance_precedence(self):
+        from unittest import mock
+        sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "common"))
+        import design_compare
+        with mock.patch.dict(os.environ, {"DESIGN_TOLERANCE_PX": ""}):
+            self.assertEqual(design_compare.tolerance({}), 2)
+            self.assertEqual(design_compare.tolerance({"tolerance": 10}), 10)
+        with mock.patch.dict(os.environ, {"DESIGN_TOLERANCE_PX": "4"}):
+            self.assertEqual(design_compare.tolerance({"tolerance": 10}), 4)
+        for bad in ("abc", "-1"):
+            with mock.patch.dict(os.environ, {"DESIGN_TOLERANCE_PX": bad}), self.assertRaises(SystemExit):
+                design_compare.tolerance({})
+
+
 class PageTest(unittest.TestCase):
     def test_dynamic_zones_partial_and_short(self):
         data = {"width": 1600, "texts": [d("Новость дня", 168, 950), d("Календарь", 300, 8450),

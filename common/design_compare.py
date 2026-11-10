@@ -29,6 +29,20 @@ from sitecheck.findings import make  # noqa: E402
 FAIL_ON = ["error", "warning"]
 
 
+def tolerance(page):
+    """Допуск по положению, px: DESIGN_TOLERANCE_PX (разовый прогон) → tolerance страницы в pages.yml → 2."""
+    for value in (os.environ.get("DESIGN_TOLERANCE_PX"), page.get("tolerance")):
+        if value not in (None, ""):
+            try:
+                tol = float(value)
+            except ValueError:
+                sys.exit(f"Допуск «{value}» — не число пикселей")
+            if tol < 0:
+                sys.exit(f"Допуск {tol:g} px — должен быть не меньше 0")
+            return tol
+    return design.TOL_PX
+
+
 def cmd_extract(args):
     with open(args.svg, encoding="utf-8") as f:
         data = design.extract_svg(f.read())
@@ -78,16 +92,19 @@ def check_site(browser, site, out_root):
             data = json.load(f)
         width = p.get("width", data["width"])
         url = urljoin(site["url"], p["page"])
-        found, st = design.check_page(data, collect(browser, url, width), url, p.get("dynamic", []), finding)
+        tol = tolerance(p)
+        found, st = design.check_page(data, collect(browser, url, width), url, p.get("dynamic", []), finding, tol)
         findings += found
         texts += st["matched"]
-        lines.append(f"{p['page']} ({width:.0f}): текстов в макете {st['texts']}, "
+        lines.append(f"{p['page']} ({width:.0f}, допуск ±{tol:g} px): текстов в макете {st['texts']}, "
                      f"динамических пропущено {st['dynamic']}, сопоставлено {st['matched']}, "
                      f"в другом месте {st['moved']}, не найдено {st['missing']}")
     meta = {"project": site["key"], "project_key": site["key"], "url": site["url"],
             "started_at": dt.datetime.fromtimestamp(started, dt.timezone.utc).strftime("%Y-%m-%d %H:%M UTC"),
             "duration_s": round(time.time() - started), "pages": len(pages), "pages_failed": 0,
-            "urls_checked": texts, "run_url": os.environ.get("RUN_URL", "")}
+            "urls_checked": texts, "run_url": os.environ.get("RUN_URL", ""),
+            "note": "Допуск по положению (левый край, отступы): "
+                    + ", ".join(sorted({f"±{tolerance(p):g} px" for p in pages})) + "; стиль сравнивается точно."}
     summary = report.write_all(os.path.join(out_root, f"{site['key']}-design"), meta, findings, rules, FAIL_ON)
     print("\n".join(["Покрытие:"] + [f"  {x}" for x in lines]), file=sys.stderr)
     print(report.format_test_log("макет", rules, findings, FAIL_ON, base=site["url"]), file=sys.stderr)
