@@ -1,0 +1,38 @@
+# Фронт Иннотеха — черновик. Формат — frontend/README.md. Слой в разработке: файл — описание, не запускается.
+
+widths: [375, 768, 1600]          # 1600 — ширина макетов Figma
+
+pages:
+  - /
+  - /mery-podderzhki/
+  - /clusters/
+  - /residents/
+  - /services/
+  - /news/
+  - /calendar/
+  - /contacts/
+
+scenarios:
+  - name: support-tabs            # вкладки категорий мер на главной
+    page: /
+    width: 1600
+    steps:
+      - click: "Стартапам"
+      - expect_visible: "Старт"
+  - name: calendar-month          # календарь листает месяцы без перехода на ?date= (см. issue #36, #44)
+    page: /calendar/
+    width: 1600
+    steps:
+      - click: "следующий месяц"  # уточнить подпись или селектор кнопки
+      - expect_url_unchanged: true
+  - name: menu-mobile
+    page: /
+    width: 375
+    steps:
+      - click: "меню"             # уточнить aria-label кнопки меню
+      - expect_visible: "Меры поддержки"
+
+forms:
+  - name: resident-application    # «Стать резидентом»
+    page: /resident/
+    required: []                  # уточнить по форме

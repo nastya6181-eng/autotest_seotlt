@@ -1,0 +1,17 @@
+# Интеграции: внешние сервисы сайта. Формат — integrations/README.md.
+# Ключи и пароли — только секретами GitHub, здесь имена секретов. Слой пока в разработке: файл — описание.
+
+maps: { provider: yandex, pages: [/contacts/] }   # где должна рисоваться карта
+
+analytics: []
+  # - { provider: yandex_metrika, counter: 12345678, all_pages: true, goals: [form_send] }
+
+forms_delivery: []                # заявка с формы должна дойти
+  # - { form: feedback, to: mailbox, mailbox_secret: TEST_MAILBOX_<КЛЮЧ> }
+
+mail_domain: example.ru           # SPF / DKIM / DMARC для писем с сайта
+
+social: []
+  # - { name: vk, url: https://vk.com/... }
+
+domain_expiry_days: 30            # предупредить, если домен истекает раньше
