@@ -268,6 +268,8 @@ def summary_text(summary, rules, groups, limit):
             pages = len({p for g in rows for p in g["pages"]})
             f.write(f"| {mark} | {cell(rules[rule_id][1])} `{rule_id}` | "
                     f"{SEV_TITLE.get(sev, sev)} | {sum(len(g['pages']) for g in rows)} | {pages} |\n")
+        if summary.get("note"):
+            f.write(f"\n{cell(summary['note'])}\n")
         if summary.get("crawl_problem"):
             f.write(f"\n> ⛔ **Сайт не обошли, тесты не запускались.** {cell(summary['crawl_problem'])}\n")
         if passed and summary["pages"]:
