@@ -167,34 +167,102 @@ def match(design, site):
 TOL_PX = 2
 NEIGHBOUR_PX = 600  # сосед сверху ищется рядом; дальше — это уже другой блок страницы
 
+NAME = "design"
+RULES = {
+    "missing": ("warning", "Текст из макета не найден на сайте"),
+    "moved": ("warning", "Блок на сайте в другом месте страницы, чем в макете"),
+    "font_size": ("warning", "Размер шрифта не как в макете"),
+    "font_weight": ("warning", "Начертание (жирность) не как в макете"),
+    "font_family": ("warning", "Гарнитура не как в макете"),
+    "color": ("warning", "Цвет текста не как в макете"),
+    "letter_spacing": ("warning", "Межбуквенный интервал не как в макете"),
+    "line_height": ("warning", "Межстрочный интервал не как в макете"),
+    "lines": ("warning", "Текст переносится на другое число строк"),
+    "left": ("warning", "Левый край текста не как в макете"),
+    "gap": ("warning", "Отступ до блока сверху не как в макете"),
+}
+
 
 def compare(pairs):
-    """Отличия по каждой паре: стиль — напрямую, положение — относительно соседа сверху в той же колонке."""
+    """Отличия по каждой паре: стиль — напрямую, положение — относительно соседа сверху в той же колонке.
+    Отличие: (правило, что сравниваем, макет, сайт)."""
     pairs = sorted(pairs, key=lambda p: (p[0]["y"], p[0]["x"]))
     results = []
     for i, (d, s) in enumerate(pairs):
         diffs = []
         if abs(d["font_size"] - s["font_size"]) > 0.5:
-            diffs.append(("font-size", d["font_size"], s["font_size"]))
+            diffs.append(("font_size", "font-size", d["font_size"], s["font_size"]))
         if d["font_weight"] != s["font_weight"]:
-            diffs.append(("font-weight", d["font_weight"], s["font_weight"]))
+            diffs.append(("font_weight", "font-weight", d["font_weight"], s["font_weight"]))
         if d["font_family"] and d["font_family"].lower() not in s["font_family"].lower().split(",")[0]:
-            diffs.append(("font-family", d["font_family"], s["font_family"].split(",")[0].strip('"\' ')))
+            diffs.append(("font_family", "font-family", d["font_family"], s["font_family"].split(",")[0].strip('"\' ')))
         if d["color"] != rgb_to_hex(s["color"]):
-            diffs.append(("color", d["color"], rgb_to_hex(s["color"])))
+            diffs.append(("color", "color", d["color"], rgb_to_hex(s["color"])))
         if abs(d["letter_spacing_px"] - s["letter_spacing_px"]) > 0.3:
-            diffs.append(("letter-spacing", d["letter_spacing_px"], s["letter_spacing_px"]))
+            diffs.append(("letter_spacing", "letter-spacing", d["letter_spacing_px"], s["letter_spacing_px"]))
         if d["line_height"] and s["line_height_px"] and abs(d["line_height"] - s["line_height_px"]) > 1:
-            diffs.append(("line-height", d["line_height"], s["line_height_px"]))
-        if d["lines"] != s["lines"]:
-            diffs.append(("строк", d["lines"], s["lines"]))
+            diffs.append(("line_height", "line-height", d["line_height"], s["line_height_px"]))
+        if d["lines"] != s["lines"] and not s.get("partial"):
+            diffs.append(("lines", "строк", d["lines"], s["lines"]))
         if abs(d["x"] - s["x"]) > TOL_PX:
-            diffs.append(("левый край", round(d["x"]), round(s["x"])))
+            diffs.append(("left", "левый край", round(d["x"]), round(s["x"])))
         above = next((p for p in reversed(pairs[:i]) if abs(p[0]["x"] - d["x"]) < 40
                       and d["y"] - NEIGHBOUR_PX < p[0]["y"] < d["y"] - 1), None)
         if above:
             gap_d, gap_s = d["y"] - above[0]["y"], s["y"] - above[1]["y"]
             if abs(gap_d - gap_s) > TOL_PX:
-                diffs.append((f"отступ от «{above[0]['text'][:40]}»", round(gap_d), round(gap_s)))
+                diffs.append(("gap", f"отступ от «{above[0]['text'][:40]}»", round(gap_d), round(gap_s)))
         results.append({"design": d, "site": s, "diffs": diffs})
     return results
+
+
+def in_zone(t, zones):
+    """Зона — [y1, y2] (вся ширина) или [x1, y1, x2, y2] в координатах макета."""
+    for z in zones or ():
+        x1, y1, x2, y2 = (0, z[0], 10 ** 6, z[1]) if len(z) == 2 else z
+        if x1 <= t["x"] <= x2 and y1 <= t["y"] <= y2:
+            return True
+    return False
+
+
+def match_partial(missing, site, taken):
+    """Второй проход: текст макета — начало блока сайта («158 м» + «²» в макете, «158 м²» на сайте)."""
+    found, rest = [], []
+    for d in missing:
+        key = normalize(d["text"])
+        cands = [s for s in site if not s.get("offscreen") and id(s) not in taken and len(key) >= 3
+                 and normalize(s["text"]).startswith(key)
+                 and ((s["x"] - d["x"]) ** 2 + (s["y"] - d["y"]) ** 2) ** 0.5 <= MAX_SHIFT_PX]
+        if cands:
+            best = min(cands, key=lambda s: ((s["x"] - d["x"]) ** 2 + (s["y"] - d["y"]) ** 2, -s["depth"]))
+            taken.add(id(best))
+            found.append((d, {**best, "partial": True}))
+        else:
+            rest.append(d)
+    return found, rest
+
+
+def check_page(design_data, site, url, zones=(), make=None):
+    """Сравнить одну страницу. Возвращает замечания (Finding) и статистику покрытия."""
+    texts = [t for t in design_data["texts"] if not in_zone(t, zones)]
+    pairs, missing, far = match(texts, site)
+    taken = {id(s) for _, s in pairs + far}
+    partial, missing = match_partial(missing, site, taken)
+    short = [d for d in missing if len(normalize(d["text"])) <= 2]  # «²», «₽», «–» — нечего сопоставлять
+    missing = [d for d in missing if d not in short]
+    results = compare(pairs + partial)
+    findings = []
+    for r in results:
+        d, s = r["design"], r["site"]
+        for rule, label, want, got in r["diffs"]:
+            delta = f" ({got - want:+g})" if isinstance(want, (int, float)) and isinstance(got, (int, float)) else ""
+            findings.append(make(rule, d["text"], url, f"макет: y={d['y']:.0f}, x={d['x']:.0f}",
+                                 message=f"{label}: макет {want}, сайт {got}{delta}"))
+    for d, s in far:
+        findings.append(make("moved", d["text"], url, f"макет: y={d['y']:.0f}, x={d['x']:.0f}",
+                             message=f"в макете y={d['y']:.0f} x={d['x']:.0f}, на сайте y={s['y']:.0f} x={s['x']:.0f}"))
+    for d in missing:
+        findings.append(make("missing", d["text"], url, f"макет: y={d['y']:.0f}, x={d['x']:.0f}"))
+    stats = {"texts": len(design_data["texts"]), "dynamic": len(design_data["texts"]) - len(texts),
+             "matched": len(pairs) + len(partial), "moved": len(far), "missing": len(missing), "short": len(short)}
+    return findings, stats

@@ -1,0 +1,131 @@
+# Сверка вёрстки с макетами Figma — отдельный пайплайн, по расписанию и вручную.
+#   infra  — самопроверка, список сайтов: секреты SITE_<КЛЮЧ>, у которых есть projects/<ключ>/design/pages.yml
+#   tests  — чанк на сайт: браузер на ширине макета, сравнение текстов (шрифт, цвет, переносы, отступы)
+#   logs   — сборщик: общая таблица, Checks
+# Макеты — JSON, извлечённый из SVG-экспорта Figma (common/design_compare.py extract), лежит в репозитории.
+name: Design checks
+
+on:
+  schedule:
+    - cron: "30 4 * * 1-5"          # 07:30 МСК, пн–пт — после общих проверок
+  workflow_dispatch:
+    inputs:
+      site:
+        description: "Ключ сайта (секрет SITE_<КЛЮЧ>) или all"
+        default: all
+
+permissions:
+  contents: read
+
+concurrency:
+  group: design-checks-${{ github.ref }}
+  cancel-in-progress: false
+
+defaults:
+  run:
+    shell: bash   # pipefail: упавшая сверка красит шаг и прогон
+
+env:
+  REPORT_FULL_URLS: ${{ vars.REPORT_FULL_URLS || 'false' }}
+  PYTHON_VERSION: "3.12"
+  RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+
+jobs:
+  infra:
+    runs-on: ubuntu-latest
+    outputs:
+      sites: ${{ steps.sites.outputs.sites }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+          cache: pip
+      - run: pip install -r requirements.txt
+      - name: Самопроверка
+        run: python -m unittest discover -v tests
+      - name: Сайты с макетами
+        id: sites
+        env:
+          SECRETS_JSON: ${{ toJSON(secrets) }}
+          SITE: ${{ inputs.site || 'all' }}
+        run: |
+          python common/list_sites.py --mask
+          keys=$(python common/list_sites.py --design)
+          [ "$keys" != "[]" ] || { echo "::error::Нет сайтов с макетами: нужен projects/<ключ>/design/pages.yml и секрет SITE_<КЛЮЧ>"; exit 1; }
+          echo "$keys" | jq -r '"Сайтов с макетами: \(length) — " + (map(.key) | join(", "))'
+          echo "sites=$keys" >> "$GITHUB_OUTPUT"
+
+  tests:
+    needs: infra
+    name: design (${{ matrix.site.key }})
+    runs-on: ${{ vars.RUNNER || 'ubuntu-latest' }}
+    timeout-minutes: 30
+    strategy:
+      fail-fast: false
+      matrix:
+        site: ${{ fromJson(needs.infra.outputs.sites) }}
+    env:
+      # чанк получает только секрет своего сайта
+      SITES: ${{ matrix.site.secret && format('{0}={1}', matrix.site.key, secrets[matrix.site.secret]) || '' }}
+      SITE: ${{ matrix.site.key }}
+      OUT: reports/${{ matrix.site.key }}-design
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+          cache: pip
+      - run: pip install -r requirements-design.txt
+      - name: Спрятать адреса сайтов в логах
+        run: python common/list_sites.py --mask
+      - name: Браузер
+        run: python -m playwright install --with-deps chromium
+      - name: "Тест: макет"
+        run: |
+          mkdir -p "$OUT/logs"
+          python common/design_compare.py run 2>&1 | tee "$OUT/logs/design.log"
+      - name: Результаты чанка
+        id: artifact
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: design-${{ matrix.site.key }}
+          path: ${{ env.OUT }}
+          retention-days: 90
+      - name: Сводка на странице прогона
+        if: always()
+        env:
+          ARTIFACT_URL: ${{ steps.artifact.outputs.artifact-url }}
+        run: |
+          {
+            cat "$OUT/summary.md" 2>/dev/null || echo "### ❌ ${{ matrix.site.key }}: отчёта нет — см. шаг «Тест: макет»"
+            echo
+            echo "Лог сверки — шаг «Тест: макет». Все отличия одной таблицей: [findings.csv](${ARTIFACT_URL})."
+          } >> "$GITHUB_STEP_SUMMARY"
+
+  logs:
+    needs: [infra, tests]
+    if: always() && needs.infra.result == 'success'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      checks: write
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: design-*
+          path: collected
+      - name: Привести имена к общему сборщику
+        run: for d in collected/design-*; do [ -d "$d" ] && mv "$d" "collected/report-$(basename "$d" | sed 's/^design-//')"; done
+      - name: Общая сводка
+        run: python common/build_index.py collected | sed 's/## Общие проверки сайтов/## Сверка вёрстки с макетами/' >> "$GITHUB_STEP_SUMMARY"
+      - name: Результаты как тесты (вкладка Checks)
+        if: hashFiles('collected/**/junit.xml') != ''
+        uses: mikepenz/action-junit-report@v5
+        with:
+          report_paths: collected/**/junit.xml
+          check_name: Сверка вёрстки с макетами
+          include_passed: true
+          detailed_summary: true
