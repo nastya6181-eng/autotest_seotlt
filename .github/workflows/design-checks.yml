@@ -64,7 +64,8 @@ jobs:
   tests:
     needs: infra
     name: design (${{ matrix.site.key }} · ${{ matrix.site.page }})
-    runs-on: ${{ vars.RUNNER || 'ubuntu-latest' }}
+    # образ закреплён: ubuntu-latest уже 26.04, а Playwright ставит Chromium только на поддерживаемые версии
+    runs-on: ${{ vars.RUNNER || 'ubuntu-24.04' }}
     timeout-minutes: 30
     strategy:
       fail-fast: false
@@ -127,7 +128,13 @@ jobs:
           pattern: design-*
           path: collected
       - name: Привести имена к общему сборщику
-        run: for d in collected/design-*; do [ -d "$d" ] && mv "$d" "collected/report-$(basename "$d" | sed 's/^design-//')"; done
+        run: |
+          mkdir -p collected
+          shopt -s nullglob   # отчётов может не быть, если все задания упали до отчёта
+          for d in collected/design-*/; do
+            d=${d%/}
+            mv "$d" "collected/report-${d#collected/design-}"
+          done
       - name: Общая сводка
         run: python common/build_index.py collected | sed 's/## Общие проверки сайтов/## Сверка вёрстки с макетами/' >> "$GITHUB_STEP_SUMMARY"
       - name: Результаты как тесты (вкладка Checks)
