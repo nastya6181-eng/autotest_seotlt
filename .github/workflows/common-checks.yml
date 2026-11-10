@@ -5,6 +5,7 @@
 #   tests  — чанк на каждый сайт: обход сайта, затем тесты по одному шагу на проверку
 #   logs   — сборщик: логи и отчёты всех чанков, сводка, Checks, история
 name: Common checks
+run-name: "Common checks · ${{ inputs.site || 'all' }}"
 
 on:
   workflow_dispatch:

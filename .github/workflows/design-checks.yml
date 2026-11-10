@@ -4,6 +4,7 @@
 #   logs   — сборщик: общая таблица, Checks
 # Макеты — JSON, извлечённый из SVG-экспорта Figma (design/design_compare.py extract), лежит в репозитории.
 name: Design checks
+run-name: "Design checks · ${{ inputs.site || 'all' }}${{ inputs.page && format(' · {0}', inputs.page) || '' }}"
 
 on:
   workflow_dispatch:
