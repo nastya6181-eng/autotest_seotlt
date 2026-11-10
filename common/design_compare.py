@@ -36,6 +36,8 @@ def cmd_extract(args):
     with open(args.out, "w", encoding="utf-8") as f:
         json.dump(data, f, ensure_ascii=False, indent=1)
     print(f"{args.out}: ширина {data['width']:.0f}, текстов {len(data['texts'])}")
+    if data["skipped_transformed"]:
+        print(f"  пропущено текстов под поворотом/масштабом: {data['skipped_transformed']} — их позицию из SVG не узнать")
 
 
 def collect(browser, url, width):
@@ -44,8 +46,14 @@ def collect(browser, url, width):
         page.goto(url, wait_until="load", timeout=90_000)  # networkidle не наступает из-за счётчиков и карт
         page.evaluate("document.fonts.ready")
         page.wait_for_timeout(1500)
-        page.evaluate("""async () => { for (let y = 0; y < document.body.scrollHeight; y += 800) {
-            window.scrollTo(0, y); await new Promise(r => setTimeout(r, 60)); } window.scrollTo(0, 0); }""")
+        # прокрутка подгружает ленивые блоки; мгновенная — у сайта может быть scroll-behavior: smooth,
+        # и замер, начатый посреди анимации, прибавит к фиксированной шапке недокрученный scrollY
+        page.evaluate("""async () => {
+            const go = y => window.scrollTo({top: y, behavior: 'instant'});
+            for (let y = 0; y < document.body.scrollHeight; y += 800) { go(y); await new Promise(r => setTimeout(r, 60)); }
+            go(0);
+            for (let i = 0; i < 50 && window.scrollY !== 0; i++) await new Promise(r => setTimeout(r, 20));
+        }""")
         return page.evaluate(design.COLLECT_JS)
     finally:
         page.close()

@@ -36,17 +36,57 @@ def join_lines(lines):
     return out
 
 
+TAG_RE = re.compile(r"<(/?)(g|text)\b([^>]*?)(/?)>")
+TRANSLATE_RE = re.compile(r"^\s*translate\(\s*([-\d.]+)(?:[\s,]+([-\d.]+))?\s*\)\s*$")
+
+
+def text_offsets(svg_text):
+    """Сдвиг каждого <text> от родительских <g transform="translate(…)">: {позиция тега: (dx, dy) или None}.
+    None — под другим преобразованием (поворот, масштаб, матрица): координаты такого текста не верны."""
+    stack, out = [], {}
+    for m in TAG_RE.finditer(svg_text):
+        close, tag, attrs, selfclose = m.groups()
+        if close:
+            if stack:
+                stack.pop()
+            continue
+        own = attr(attrs, "transform")
+        step = (0.0, 0.0)
+        if own:
+            t = TRANSLATE_RE.match(own)
+            step = (float(t.group(1)), float(t.group(2) or 0)) if t else None
+        if tag == "text":
+            dx = dy = 0.0
+            for s in stack + [step]:
+                if s is None:
+                    dx = None
+                    break
+                dx, dy = dx + s[0], dy + s[1]
+            out[m.start()] = None if dx is None else (dx, dy)
+        if not selfclose and tag == "g":
+            stack.append(step)
+        elif not selfclose:
+            stack.append((0.0, 0.0))
+    return out
+
+
 def extract_svg(svg_text):
     """Тексты фрейма: строка, позиция первой строки (левый край, базовая линия), шрифт, цвет."""
     width = float(attr(svg_text[:500], "width", "0"))
-    texts = []
-    for attrs, body in TEXT_RE.findall(svg_text):
+    offsets = text_offsets(svg_text)
+    texts, skipped = [], 0
+    for m in TEXT_RE.finditer(svg_text):
+        attrs, body = m.groups()
+        offset = offsets.get(m.start(), (0.0, 0.0))
+        if offset is None:
+            skipped += 1
+            continue
         spans = TSPAN_RE.findall(body)
         if not spans:
             continue
         lines = [html.unescape(t) for _, t in spans]
-        xs = [float(attr(a, "x", "0")) for a, _ in spans]
-        ys = [float(attr(a, "y", "0")) for a, _ in spans]
+        xs = [float(attr(a, "x", "0")) + offset[0] for a, _ in spans]
+        ys = [float(attr(a, "y", "0")) + offset[1] for a, _ in spans]
         text = join_lines(lines)
         if not text.strip():
             continue
@@ -65,7 +105,7 @@ def extract_svg(svg_text):
             "letter_spacing_px": round(float(ls[:-2]) * fs, 2) if ls.endswith("em") else float(ls.rstrip("px") or 0),
             "color": NAMED.get(attr(attrs, "fill", "#000000"), attr(attrs, "fill", "#000000")).upper(),
         })
-    return {"width": width, "texts": texts}
+    return {"width": width, "texts": texts, "skipped_transformed": skipped}
 
 
 # Собирает с открытой страницы все текстовые блоки: текст (как видит пользователь, с text-transform),
@@ -76,8 +116,10 @@ COLLECT_JS = r"""
   const ctx = document.createElement('canvas').getContext('2d');
   const out = [];
   const seen = new Set();
-  const visible = el => { const s = getComputedStyle(el);
-    return s.visibility !== 'hidden' && s.display !== 'none' && +s.opacity > 0 && el.getClientRects().length; };
+  // checkVisibility учитывает и предков: opacity:0 или visibility:hidden у обёртки прячут текст
+  const visible = el => el.getClientRects().length && (el.checkVisibility
+    ? el.checkVisibility({opacityProperty: true, visibilityProperty: true})
+    : getComputedStyle(el).visibility !== 'hidden' && +getComputedStyle(el).opacity > 0);
   const ownText = el => [...el.childNodes].some(n => n.nodeType === 3 && n.textContent.trim());
   const blocks = new Set();
   for (const el of document.body.querySelectorAll('*')) {
@@ -127,6 +169,7 @@ def rgb_to_hex(css):
     return f"#{r:02X}{g:02X}{b:02X}"
 
 
+PARTIAL_TAIL = 2  # «158 м» + «²», «30» + «₽»: хвост не длиннее — иначе это уже другой текст
 MAX_SHIFT_PX = 500  # дальше — уже не «съехало», а «этот текст на сайте в другом месте»
 
 
@@ -206,12 +249,15 @@ def compare(pairs):
             diffs.append(("lines", "строк", d["lines"], s["lines"]))
         if abs(d["x"] - s["x"]) > TOL_PX:
             diffs.append(("left", "левый край", round(d["x"]), round(s["x"])))
-        above = next((p for p in reversed(pairs[:i]) if abs(p[0]["x"] - d["x"]) < 40
-                      and d["y"] - NEIGHBOUR_PX < p[0]["y"] < d["y"] - 1), None)
+        near = [p for p in reversed(pairs[:i]) if d["y"] - NEIGHBOUR_PX < p[0]["y"] < d["y"] - 1]
+        # сосед сверху: в той же колонке, иначе — ближайший текст выше в любой колонке
+        above = next((p for p in near if abs(p[0]["x"] - d["x"]) < 40), None) or (near[0] if near else None)
         if above:
             gap_d, gap_s = d["y"] - above[0]["y"], s["y"] - above[1]["y"]
             if abs(gap_d - gap_s) > TOL_PX:
                 diffs.append(("gap", f"отступ от «{above[0]['text'][:40]}»", round(gap_d), round(gap_s)))
+        elif d["y"] < NEIGHBOUR_PX and abs(d["y"] - s["y"]) > TOL_PX:  # верх страницы: ловит сдвиг всей страницы
+            diffs.append(("gap", "отступ от верха страницы", round(d["y"]), round(s["y"])))
         results.append({"design": d, "site": s, "diffs": diffs})
     return results
 
@@ -230,8 +276,8 @@ def match_partial(missing, site, taken):
     found, rest = [], []
     for d in missing:
         key = normalize(d["text"])
-        cands = [s for s in site if not s.get("offscreen") and id(s) not in taken and len(key) >= 3
-                 and normalize(s["text"]).startswith(key)
+        cands = [s for s in site if not s.get("offscreen") and id(s) not in taken and len(key) >= 2
+                 and normalize(s["text"]).startswith(key) and len(normalize(s["text"])) - len(key) <= PARTIAL_TAIL
                  and ((s["x"] - d["x"]) ** 2 + (s["y"] - d["y"]) ** 2) ** 0.5 <= MAX_SHIFT_PX]
         if cands:
             best = min(cands, key=lambda s: ((s["x"] - d["x"]) ** 2 + (s["y"] - d["y"]) ** 2, -s["depth"]))

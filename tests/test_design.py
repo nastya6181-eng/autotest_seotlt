@@ -39,6 +39,14 @@ class ExtractTest(unittest.TestCase):
         self.assertEqual((body["lines"], body["line_height"], body["letter_spacing_px"]), (2, 24.0, 0.16))
 
 
+    def test_translate_applied_and_rotation_skipped(self):
+        svg = ('<svg width="800"><g transform="translate(200,300)"><text font-size="16"><tspan x="10" y="20">А</tspan>'
+               '</text></g><g transform="rotate(90)"><text font-size="16"><tspan x="1" y="1">Б</tspan></text></g></svg>')
+        data = design.extract_svg(svg)
+        self.assertEqual([(t["text"], t["x"], t["y"]) for t in data["texts"]], [("А", 210.0, 320.0)])
+        self.assertEqual(data["skipped_transformed"], 1)
+
+
 class MatchTest(unittest.TestCase):
     def test_repeated_texts_go_one_to_one_by_position(self):
         design_t = [d("9 февраля", 168, 1000), d("9 февраля", 610, 1000)]
@@ -82,6 +90,18 @@ class PageTest(unittest.TestCase):
                                          make("design", design.RULES, {}))
         self.assertEqual((st["dynamic"], st["matched"], st["missing"], st["short"]), (2, 2, 0, 1))
         self.assertEqual(findings, [])
+
+    def test_partial_match_only_for_short_tail(self):
+        data = {"width": 1600, "texts": [d("Подписаться", 100, 100)]}
+        findings, st = design.check_page(data, [s("Подписаться на рассылку", 100, 100)], "https://x.ru/", [],
+                                         make("design", design.RULES, {}))
+        self.assertEqual([f.rule for f in findings], ["missing"])
+
+    def test_whole_page_shift_is_caught_at_the_top(self):
+        results = design.compare(design.match([d("А", 100, 100), d("Б", 100, 200)],
+                                              [s("А", 100, 300), s("Б", 100, 400)])[0])
+        self.assertEqual([(r["design"]["text"], [x[0] for x in r["diffs"]]) for r in results if r["diffs"]],
+                         [("А", ["gap"])])
 
 
 if __name__ == "__main__":
