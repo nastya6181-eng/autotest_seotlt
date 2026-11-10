@@ -1,4 +1,6 @@
-# Общие проверки сайтов. Один пайплайн, три этапа:
+# Общие проверки сайтов — только по расписанию и вручную: сайты от изменений в репозитории
+# не меняются, обходить их на каждый PR или мерж бессмысленно. Код проверяет selftest.yml.
+# Один пайплайн, три этапа:
 #   infra  — самопроверка, зависимости, словари, список сайтов
 #   tests  — чанк на каждый сайт: обход сайта, затем тесты по одному шагу на проверку
 #   logs   — сборщик: логи и отчёты всех чанков, сводка, Checks, issues, история
@@ -18,14 +20,6 @@ on:
       checks:
         description: "Только эти тесты: tech,seo,links,spelling,typography (пусто — все)"
         default: ""
-  push:
-    branches: [main]
-    paths:
-      - "common/**"
-      - "projects/**"
-      - "tests/**"
-      - "requirements.txt"
-      - ".github/workflows/common-checks.yml"
 
 permissions:
   contents: read
@@ -112,7 +106,7 @@ jobs:
       # Чанк получает только секрет своего сайта, по имени из матрицы
       SITES: ${{ matrix.site.secret && format('{0}={1}', matrix.site.key, secrets[matrix.site.secret]) || secrets.SITES }}
       SITE: ${{ matrix.site.url || matrix.site.key }}
-      MAX_PAGES: ${{ inputs.max_pages || (github.event_name == 'push' && '20') || '' }}
+      MAX_PAGES: ${{ inputs.max_pages }}
       CHECKS: ${{ inputs.checks }}
       OUT: reports/${{ matrix.site.key }}
     steps:
@@ -234,7 +228,6 @@ jobs:
           detailed_summary: true
 
       - name: Issues по сайтам
-        if: github.event_name != 'push'
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
@@ -255,7 +248,6 @@ jobs:
           done
 
       - name: История в ветку metrics
-        if: github.event_name != 'push'
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "41898283+github-actions[bot]@users.noreply.github.com"
