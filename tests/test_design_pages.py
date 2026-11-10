@@ -48,7 +48,7 @@ class DesignPagesTest(unittest.TestCase):
         for name in ("Каталог", "my page"):
             with self.assertRaises(SystemExit):
                 design_pages.add("shop", name, "/x/", self.svg)
-        for page in ("#contact", "catalog/", "/a/#b"):
+        for page in ("#contact", "catalog/", "/a/#b", "//other.example/catalog/"):
             with self.assertRaises(SystemExit):
                 design_pages.add("shop", "contact", page, self.svg)
         design_pages.add("shop", "catalog", "/catalog/", self.svg)

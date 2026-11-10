@@ -43,6 +43,9 @@ class ExtractTest(unittest.TestCase):
         svg = ('<svg width="800"><text font-size="16"><tspan x="10" y="20">Open</tspan><tspan x="50" y="20">AI </tspan>'
                '<tspan x="80" y="20">рядом</tspan><tspan x="10" y="44">вторая строка</tspan></text></svg>')
         self.assertEqual(design.extract_svg(svg)["texts"][0]["text"], "OpenAI рядом вторая строка")
+        svg = '<svg width="800"><text x="100" y="200" font-size="16"><tspan>Hello </tspan><tspan>world</tspan></text></svg>'
+        self.assertEqual([(x["text"], x["x"], x["y"]) for x in design.extract_svg(svg)["texts"]],
+                         [("Hello world", 100.0, 200.0)])
 
     def test_translate_applied_and_rotation_skipped(self):
         svg = ('<svg width="800"><g transform="translate(200,300)"><text font-size="16"><tspan x="10" y="20">А</tspan>'

@@ -34,7 +34,7 @@ def join_lines(lines, ys=None):
         else:
             line = raw.strip()
             if not out:
-                out = line
+                out = raw.lstrip()  # хвостовой пробел первого куска нужен: «Hello » + «world»
             elif out.endswith("-"):
                 out += line  # перенос «научно-» + «исследовательских»
             else:
@@ -94,8 +94,9 @@ def extract_svg(svg_text):
         if not spans:
             continue
         lines = [html.unescape(t) for _, t in spans]
-        xs = [float(attr(a, "x", "0")) + offset[0] for a, _ in spans]
-        ys = [float(attr(a, "y", "0")) + offset[1] for a, _ in spans]
+        # tspan без своих x/y наследует координаты <text>
+        xs = [float(attr(a, "x", attr(attrs, "x", "0"))) + offset[0] for a, _ in spans]
+        ys = [float(attr(a, "y", attr(attrs, "y", "0"))) + offset[1] for a, _ in spans]
         text = join_lines(lines, ys)
         if not text.strip():
             continue
@@ -140,7 +141,7 @@ COLLECT_JS = r"""
   }
   for (const el of blocks) {
     const text = (el.innerText || '').trim();
-    if (!text || text.length > 600 || seen.has(el)) continue;
+    if (!text || text.length > 5000 || seen.has(el)) continue;  // длинный абзац макета тоже должен найтись
     // обёртка с тем же текстом, что у потомка (div > span «46»), — берём сам span
     if ([...el.querySelectorAll('*')].some(c => blocks.has(c) && (c.innerText || '').trim() === text)) continue;
     seen.add(el);

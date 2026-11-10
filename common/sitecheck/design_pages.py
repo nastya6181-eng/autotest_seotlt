@@ -37,7 +37,7 @@ def load(key):
     names = []
     for p in pages:
         p.setdefault("name", re.sub(r"[^a-z0-9-]+", "-", os.path.splitext(p["design"])[0].lower()).strip("-"))
-        if not isinstance(p.get("page"), str) or not p["page"].startswith("/"):
+        if not isinstance(p.get("page"), str) or not p["page"].startswith("/") or p["page"].startswith("//"):
             raise SystemExit(f"{path}: у страницы «{p['name']}» page должен быть путём от корня, например /catalog/")
         if not NAME_RE.match(p["name"]):
             raise SystemExit(f"{path}: имя страницы «{p['name']}» — только латиница, цифры и «-»")
@@ -82,7 +82,7 @@ def add(key, name, page, svg_path, png_path=None):
     import shutil
     if not NAME_RE.match(name):
         raise SystemExit(f"Имя страницы «{name}» — только латиница, цифры и «-», например catalog")
-    if not page.startswith("/") or "#" in page:
+    if not page.startswith("/") or page.startswith("//") or "#" in page:
         raise SystemExit(f"Путь страницы «{page}» должен начинаться с «/» и быть без «#», например /catalog/")
     base = folder(key)
     _, pages = load(key)
