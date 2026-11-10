@@ -97,6 +97,21 @@ class PageTest(unittest.TestCase):
                                          make("design", design.RULES, {}))
         self.assertEqual([f.rule for f in findings], ["missing"])
 
+    def test_partial_tail_cannot_change_a_number(self):
+        data = {"width": 1600, "texts": [d("100", 100, 100), d("EN", 300, 100)]}
+        findings, _ = design.check_page(data, [s("10000", 100, 100)], "https://x.ru/", [],
+                                        make("design", design.RULES, {}))
+        self.assertEqual(sorted(f.fragment for f in findings if f.rule == "missing"), ["100", "EN"])
+
+    def test_transparent_text_fails_color(self):
+        r = design.compare([(d("Т", 10, 10), s("Т", 10, 10, color="rgba(255, 255, 255, 0)"))])[0]
+        self.assertIn("color", [x[0] for x in r["diffs"]])
+
+    def test_isolated_section_shift_is_caught(self):
+        results = design.compare(design.match([d("А", 100, 100), d("Б", 100, 2000)],
+                                              [s("А", 100, 100), s("Б", 100, 2300)])[0])
+        self.assertEqual([r["design"]["text"] for r in results if r["diffs"]], ["Б"])
+
     def test_whole_page_shift_is_caught_at_the_top(self):
         results = design.compare(design.match([d("А", 100, 100), d("Б", 100, 200)],
                                               [s("А", 100, 300), s("Б", 100, 400)])[0])

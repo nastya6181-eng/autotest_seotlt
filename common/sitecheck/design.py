@@ -166,9 +166,12 @@ def rgb_to_hex(css):
     if not m:
         return (css or "").upper()
     r, g, b = (int(x) for x in m.groups()[:3])
+    if m.group(4) is not None and float(m.group(4)) == 0:
+        return "TRANSPARENT"  # невидимый текст не должен проходить проверку цвета
     return f"#{r:02X}{g:02X}{b:02X}"
 
 
+ALNUM = re.compile(r"[0-9a-zа-яё]", re.I)
 PARTIAL_TAIL = 2  # «158 м» + «²», «30» + «₽»: хвост не длиннее — иначе это уже другой текст
 MAX_SHIFT_PX = 500  # дальше — уже не «съехало», а «этот текст на сайте в другом месте»
 
@@ -249,9 +252,11 @@ def compare(pairs):
             diffs.append(("lines", "строк", d["lines"], s["lines"]))
         if abs(d["x"] - s["x"]) > TOL_PX:
             diffs.append(("left", "левый край", round(d["x"]), round(s["x"])))
-        near = [p for p in reversed(pairs[:i]) if d["y"] - NEIGHBOUR_PX < p[0]["y"] < d["y"] - 1]
-        # сосед сверху: в той же колонке, иначе — ближайший текст выше в любой колонке
-        above = next((p for p in near if abs(p[0]["x"] - d["x"]) < 40), None) or (near[0] if near else None)
+        higher = [p for p in reversed(pairs[:i]) if p[0]["y"] < d["y"] - 1]
+        # сосед сверху: в той же колонке рядом, иначе — ближайший текст выше где угодно; отступ
+        # всё равно относительный, поэтому съехавшая секция не тянет за собой ошибки ниже
+        above = next((p for p in higher if abs(p[0]["x"] - d["x"]) < 40 and d["y"] - p[0]["y"] < NEIGHBOUR_PX),
+                     None) or (higher[0] if higher else None)
         if above:
             gap_d, gap_s = d["y"] - above[0]["y"], s["y"] - above[1]["y"]
             if abs(gap_d - gap_s) > TOL_PX:
@@ -278,6 +283,7 @@ def match_partial(missing, site, taken):
         key = normalize(d["text"])
         cands = [s for s in site if not s.get("offscreen") and id(s) not in taken and len(key) >= 2
                  and normalize(s["text"]).startswith(key) and len(normalize(s["text"])) - len(key) <= PARTIAL_TAIL
+                 and not ALNUM.search(normalize(s["text"])[len(key):])
                  and ((s["x"] - d["x"]) ** 2 + (s["y"] - d["y"]) ** 2) ** 0.5 <= MAX_SHIFT_PX]
         if cands:
             best = min(cands, key=lambda s: ((s["x"] - d["x"]) ** 2 + (s["y"] - d["y"]) ** 2, -s["depth"]))
@@ -294,7 +300,7 @@ def check_page(design_data, site, url, zones=(), make=None):
     pairs, missing, far = match(texts, site)
     taken = {id(s) for _, s in pairs + far}
     partial, missing = match_partial(missing, site, taken)
-    short = [d for d in missing if len(normalize(d["text"])) <= 2]  # «²», «₽», «–» — нечего сопоставлять
+    short = [d for d in missing if not ALNUM.search(normalize(d["text"]))]  # «²», «₽», «–» — нечего сопоставлять
     missing = [d for d in missing if d not in short]
     results = compare(pairs + partial)
     findings = []
