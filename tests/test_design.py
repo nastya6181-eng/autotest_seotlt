@@ -3,9 +3,9 @@ import os
 import sys
 import unittest
 
-sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "common"))
-from sitecheck import design  # noqa: E402
-from sitecheck.findings import make  # noqa: E402
+sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))  # корень репозитория
+from checks.design import design  # noqa: E402
+from checks.core.findings import make  # noqa: E402
 
 SVG = """<svg width="1600" height="900" viewBox="0 0 1600 900" fill="none" xmlns="http://www.w3.org/2000/svg">
 <text fill="white" font-family="Montserrat" font-size="48" font-weight="600" letter-spacing="0em">
@@ -138,7 +138,7 @@ class ToleranceTest(unittest.TestCase):
 
     def test_tolerance_precedence(self):
         from unittest import mock
-        sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "design"))
+        sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "checks", "design"))
         import design_compare
         with mock.patch.dict(os.environ, {"DESIGN_TOLERANCE_PX": ""}):
             self.assertEqual(design_compare.tolerance({}), 2)

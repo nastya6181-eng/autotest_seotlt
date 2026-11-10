@@ -4,8 +4,8 @@ import sys
 import time
 import unittest
 
-sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "common"))
-from sitecheck import throttle  # noqa: E402
+sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))  # корень репозитория
+from checks.core import throttle  # noqa: E402
 
 
 class ThrottleTest(unittest.TestCase):

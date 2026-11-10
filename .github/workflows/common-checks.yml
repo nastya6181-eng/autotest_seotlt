@@ -65,12 +65,12 @@ jobs:
         id: dict
         uses: actions/cache@v4
         with:
-          path: common/.cache/dict
+          path: checks/content/.cache/dict
           key: ${{ env.DICT_CACHE_KEY }}
 
       - name: Словари Hunspell
         if: steps.dict.outputs.cache-hit != 'true'
-        run: python -c "import sys; sys.path.insert(0, 'common'); from sitecheck.spelling import ensure_dicts; ensure_dicts('common/.cache/dict')"
+        run: python -c "import sys; sys.path.insert(0, '.'); from checks.content.spelling import ensure_dicts; ensure_dicts('checks/content/.cache/dict')"
 
       - name: Список сайтов
         id: sites
@@ -82,8 +82,8 @@ jobs:
           SITES: ${{ secrets.SITES }}
           SITE: ${{ inputs.site || 'all' }}
         run: |
-          python common/list_sites.py --mask
-          sites=$(python common/list_sites.py)
+          python checks/core/list_sites.py --mask
+          sites=$(python checks/core/list_sites.py)
           [ "$sites" != "[]" ] || { echo "::error::Нет сайтов: заведи секреты SITE_<КЛЮЧ>"; exit 1; }
           echo "$sites" | jq -r '"Сайтов: \(length) — " + (map(.key) | join(", "))'
           echo "sites=$sites" >> "$GITHUB_OUTPUT"
@@ -119,43 +119,43 @@ jobs:
       - run: pip install -r requirements.txt
 
       - name: Спрятать адреса сайтов в логах
-        run: python common/list_sites.py --mask
+        run: python checks/core/list_sites.py --mask
 
       - name: Словари из кэша
         uses: actions/cache/restore@v4
         with:
-          path: common/.cache/dict
+          path: checks/content/.cache/dict
           key: ${{ env.DICT_CACHE_KEY }}
 
       - name: Обход сайта
         id: crawl
         run: |
           mkdir -p "$OUT/logs"
-          python common/run_checks.py --stage crawl 2>&1 | tee "$OUT/logs/crawl.log"
+          python checks/content/run_checks.py --stage crawl 2>&1 | tee "$OUT/logs/crawl.log"
 
       - name: "Тест: техника"
         if: always() && steps.crawl.outcome == 'success' && (env.CHECKS == '' || contains(env.CHECKS, 'tech'))
-        run: python common/run_checks.py --stage test --only tech 2>&1 | tee "$OUT/logs/tech.log"
+        run: python checks/content/run_checks.py --stage test --only tech 2>&1 | tee "$OUT/logs/tech.log"
 
       - name: "Тест: SEO"
         if: always() && steps.crawl.outcome == 'success' && (env.CHECKS == '' || contains(env.CHECKS, 'seo'))
-        run: python common/run_checks.py --stage test --only seo 2>&1 | tee "$OUT/logs/seo.log"
+        run: python checks/content/run_checks.py --stage test --only seo 2>&1 | tee "$OUT/logs/seo.log"
 
       - name: "Тест: ссылки"
         if: always() && steps.crawl.outcome == 'success' && (env.CHECKS == '' || contains(env.CHECKS, 'links'))
-        run: python common/run_checks.py --stage test --only links 2>&1 | tee "$OUT/logs/links.log"
+        run: python checks/content/run_checks.py --stage test --only links 2>&1 | tee "$OUT/logs/links.log"
 
       - name: "Тест: орфография"
         if: always() && steps.crawl.outcome == 'success' && (env.CHECKS == '' || contains(env.CHECKS, 'spelling'))
-        run: python common/run_checks.py --stage test --only spelling 2>&1 | tee "$OUT/logs/spelling.log"
+        run: python checks/content/run_checks.py --stage test --only spelling 2>&1 | tee "$OUT/logs/spelling.log"
 
       - name: "Тест: типографика"
         if: always() && steps.crawl.outcome == 'success' && (env.CHECKS == '' || contains(env.CHECKS, 'typography'))
-        run: python common/run_checks.py --stage test --only typography 2>&1 | tee "$OUT/logs/typography.log"
+        run: python checks/content/run_checks.py --stage test --only typography 2>&1 | tee "$OUT/logs/typography.log"
 
       - name: Отчёт по сайту
         if: always() && steps.crawl.outcome != 'skipped'
-        run: python common/run_checks.py --stage report 2>&1 | tee "$OUT/logs/report.log" || true
+        run: python checks/content/run_checks.py --stage report 2>&1 | tee "$OUT/logs/report.log" || true
 
       - name: Результаты чанка
         id: artifact
@@ -196,7 +196,7 @@ jobs:
         env:
           SECRETS_JSON: ${{ toJSON(secrets) }}
           SITES: ${{ secrets.SITES }}
-        run: python common/list_sites.py --mask
+        run: python checks/core/list_sites.py --mask
 
       - name: Забрать результаты всех чанков
         uses: actions/download-artifact@v4
@@ -214,7 +214,7 @@ jobs:
           retention-days: 90
 
       - name: Общая сводка
-        run: python common/build_index.py collected >> "$GITHUB_STEP_SUMMARY"
+        run: python checks/core/build_index.py collected >> "$GITHUB_STEP_SUMMARY"
 
       - name: Результаты как тесты (вкладка Checks)
         if: hashFiles('collected/**/junit.xml') != ''

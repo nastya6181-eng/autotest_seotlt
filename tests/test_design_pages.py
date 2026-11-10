@@ -5,8 +5,9 @@ import tempfile
 import unittest
 from unittest import mock
 
-sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "common"))
-from sitecheck import design_pages, sites  # noqa: E402
+sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))  # корень репозитория
+from checks.core import sites
+from checks.design import pages as design_pages  # noqa: E402
 
 SVG = ('<svg width="1440" height="900"><text font-family="Montserrat" font-size="32" font-weight="600" fill="#1B2321">'
        '<tspan x="100" y="200">КАТАЛОГ</tspan></text></svg>')
@@ -15,7 +16,7 @@ SVG = ('<svg width="1440" height="900"><text font-family="Montserrat" font-size=
 class DesignPagesTest(unittest.TestCase):
     def setUp(self):
         self.tmp = tempfile.TemporaryDirectory()
-        self.patch = mock.patch.object(sites, "PROJECTS", self.tmp.name)
+        self.patch = mock.patch.object(sites, "SITES_DIR", self.tmp.name)
         self.patch.start()
         os.makedirs(os.path.join(self.tmp.name, "shop", "design"))
         with open(os.path.join(self.tmp.name, "shop", "design", "pages.yml"), "w", encoding="utf-8") as f:

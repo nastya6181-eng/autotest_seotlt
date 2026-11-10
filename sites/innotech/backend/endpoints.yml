@@ -1,0 +1,22 @@
+# Бэк Иннотеха — черновик. Формат — checks/backend/README.md. Слой в разработке: файл — описание, не запускается.
+
+ttfb_ms: 800
+
+pages:
+  - { path: /, status: 200 }
+  - { path: /mery-podderzhki/, status: 200 }
+  - { path: /mery-podderzhki, status: 301, location: /mery-podderzhki/ }
+  - { path: "/calendar/?date=not-a-date", status: 200 }   # кривая дата не должна давать 500; уточнить ожидаемое поведение
+  - { path: /no-such-page-404/, status: 404 }
+
+ajax: []                          # уточнить: какие AJAX-адреса дёргают календарь, вкладки мер, «показать ещё»
+
+content:
+  - { section: /mery-podderzhki/, item_must_have: [контакты, сроки] }
+  - { section: /residents/, item_must_have: [описание] }
+  - { section: /news/, item_must_have: [дата] }
+
+forms:
+  - { name: resident-application, page: /resident/, staging_only: true }   # уточнить: есть ли тестовый стенд
+
+security: false                   # уточнить разрешение у владельца
