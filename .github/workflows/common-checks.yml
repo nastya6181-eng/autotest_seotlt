@@ -227,23 +227,6 @@ jobs:
           detailed_summary: true
 
       - name: История в ветку metrics
-        run: |
-          git config user.name "github-actions[bot]"
-          git config user.email "41898283+github-actions[bot]@users.noreply.github.com"
-          if git ls-remote --exit-code origin metrics >/dev/null; then
-            git fetch --depth=1 origin metrics && git worktree add m origin/metrics && git -C m checkout -B metrics
-          else
-            git worktree add --orphan -b metrics m
-          fi
-          mkdir -p m/history
-          for s in collected/report-*/summary.json; do
-            [ -f "$s" ] || continue
-            f="m/history/$(jq -r .project_key "$s").csv"
-            [ -f "$f" ] || echo "date,run,pages,pages_failed,urls,errors,warnings,info,failed,$(jq -r '.by_rule|keys_unsorted|join(",")' "$s")" > "$f"
-            jq -r --arg run "$GITHUB_RUN_ID" \
-              '[.started_at, $run, .pages, .pages_failed, (.urls_checked//0),
-                (.findings_unique.error//0), (.findings_unique.warning//0), (.findings_unique.info//0), .failed]
-                + [.by_rule[]] | @csv' \
-              "$s" >> "$f"
-          done
-          cd m && git add history && git commit -qm "metrics: run $GITHUB_RUN_ID" && git push -q origin metrics || echo "нечего записывать"
+        env:
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        run: bash checks/core/save_history.sh collected content

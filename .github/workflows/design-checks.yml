@@ -121,10 +121,13 @@ jobs:
     if: always() && needs.infra.result == 'success'
     runs-on: ubuntu-latest
     permissions:
-      contents: read
+      contents: write     # история в ветку metrics
       checks: write
     steps:
       - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
       - uses: actions/download-artifact@v4
         with:
           pattern: design-*
@@ -147,3 +150,7 @@ jobs:
           check_name: Сверка вёрстки с макетами
           include_passed: true
           detailed_summary: true
+      - name: История в ветку metrics
+        env:
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        run: bash checks/core/save_history.sh collected design
