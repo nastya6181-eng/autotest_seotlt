@@ -9,6 +9,7 @@ download-artifact с v5 кладёт единственный найденный
 """
 import json
 import os
+import re
 import shutil
 import sys
 
@@ -18,7 +19,7 @@ def normalize(collected):
     if not os.path.exists(top):
         return None
     with open(top, encoding="utf-8") as f:
-        key = json.load(f)["project_key"]
+        key = re.sub(r"[^\w.-]", "_", str(json.load(f)["project_key"])).strip(".") or "site"
     target = os.path.join(collected, f"report-{key}")
     os.makedirs(target)
     for name in os.listdir(collected):
