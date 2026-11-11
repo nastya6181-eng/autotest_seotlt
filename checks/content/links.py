@@ -174,10 +174,10 @@ def run(pages, cfg, overrides, env):
 
     for url, (status, final, chain, err) in results.items():
         internal = same_site(urlparse(url).netloc, host)
-        if not internal and (status in BOT_BLOCK or err == "слишком много редиректов"):
+        if not internal and status in BOT_BLOCK:
             for page, text in uses[url]:
                 out.append(finding("external_unchecked", url, page, text,
-                                   message=f"{RULES['external_unchecked'][1]}: {err or status}"))
+                                   message=f"{RULES['external_unchecked'][1]}: код {status}"))
         elif err or status is None or status >= 400:
             rule = "broken_internal" if internal else "broken_external"
             for page, text in uses[url]:

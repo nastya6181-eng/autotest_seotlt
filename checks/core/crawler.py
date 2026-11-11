@@ -131,7 +131,7 @@ class PageParser(HTMLParser):
                        "blank": (a.get("target") or "").lower() == "_blank", **self._where(tag, a)}
             self.links.append(self._a)
         elif tag in SRC_TAGS and a.get(SRC_TAGS[tag]):
-            service = tag == "link" and ((a.get("rel") or "") in {"preconnect", "dns-prefetch"} or "itemprop" in a)
+            service = tag == "link" and ((a.get("rel") or "") in {"preconnect", "dns-prefetch"} or ("itemprop" in a and not a.get("rel")))
             if not service:  # <link itemprop href="http://schema.org/InStock"> — разметка для поисковиков, не ссылка
                 self.links.append({"tag": tag, "raw": a[SRC_TAGS[tag]], "text": a.get("alt") or "",
                                    **self._where(tag, a)})
