@@ -240,10 +240,11 @@ def report_md(data, dashboard_url=""):
                    + (f"; просрочено `site-fix`: **{i['overdue']}**" if i["overdue"] else "") + ".")
     checks = {n: w for n, w in (r or {}).get("by_workflow", {}).items() if n in CHECK_WORKFLOWS}
     if checks:
-        total = sum(w["success"] + w["defects"] + w["infra"] for w in checks.values())
+        total = sum(w["success"] + w["defects"] + w["infra"] + w["other"] for w in checks.values())
         out.append(f"- **Прогоны проверок за {r['days']} дней:** {total}; нашли дефекты сайта — "
                    f"{sum(w['defects'] for w in checks.values())}, сломались сами проверки — "
-                   f"{sum(w['infra'] for w in checks.values())}, чисто — {sum(w['success'] for w in checks.values())}.")
+                   f"{sum(w['infra'] for w in checks.values())}, чисто — {sum(w['success'] for w in checks.values())}, "
+                   f"отменены или ждали подтверждения — {sum(w['other'] for w in checks.values())}.")
     if not q and not i:
         out.append("Данных пока нет: запусти Common checks или Design checks.")
 

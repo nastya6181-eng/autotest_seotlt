@@ -5,7 +5,7 @@ set -euo pipefail
 body=$1
 title="📊 Метрики автотестов"
 gh label create metrics --color 0E8A16 --description "Задача с метриками, обновляется автоматически" 2>/dev/null || true
-number=$(gh issue list --label metrics --state open --json number --jq '.[0].number // empty')
+number=$(gh issue list --label metrics --author app/github-actions --state open --json number --jq '.[0].number // empty')  # только своя
 if [ -z "$number" ]; then
   url=$(gh issue create --title "$title" --label metrics --body-file "$body")
   number=${url##*/}
