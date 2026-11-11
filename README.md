@@ -1,5 +1,7 @@
 # Автотесты сайтов SEOTLT
 
+> Как запускать проверки: [PIPELINES.md](PIPELINES.md)
+
 [![Common checks](https://github.com/nastya6181-eng/autotest_seotlt/actions/workflows/common-checks.yml/badge.svg)](https://github.com/nastya6181-eng/autotest_seotlt/actions/workflows/common-checks.yml)
 
 Автоматические проверки клиентских сайтов. Репозиторий делится на две части по одному правилу:
@@ -189,6 +191,8 @@ export SITE=site-a                                            # ключ сай�
 Проверки, нужные только одному проекту, кладутся в его папку. Пример: форма заявки или калькулятор.
 
 ## Пайплайн
+
+**Как запускать — пошагово, с рецептами: [PIPELINES.md](PIPELINES.md).** Ниже — устройство.
 
 Общие проверки идут одним пайплайном `.github/workflows/common-checks.yml` из трёх этапов:
 
