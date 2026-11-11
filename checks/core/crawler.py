@@ -33,15 +33,19 @@ AREAS = [("шапка", ("header",), ("header", "top-bar", "topbar")),
          ("содержимое", ("main", "article"), ("content", "main"))]
 
 
+CSS_NAME = re.compile(r"-?[A-Za-z_][\w-]*")  # md:flex, w-1/2 без экранирования селектор ломают
+MAX_DEPTH = 256
+AUTO_CLOSE = {"li": {"ul", "ol"}, "p": {"div", "section", "article", "td"}, "tr": {"table", "tbody", "thead"},
+              "td": {"tr"}, "th": {"tr"}, "option": {"select"}, "dt": {"dl"}, "dd": {"dl"}}
 GENERATED_ID = re.compile(r"^(bx_|comp_|ember|react-|yui_)|\d{3,}|[a-z][A-Z]{2}|[A-Z][a-z][A-Z]")
 
 
 def node_token(tag, a):
     """Элемент так, как его ищут в DevTools: тег с id или первым классом. Сгенерированный id
     (Битрикс, фреймворки) меняется от загрузки к загрузке — по нему не найти."""
-    if a.get("id") and not GENERATED_ID.search(a["id"]):
+    if a.get("id") and CSS_NAME.fullmatch(a["id"]) and not GENERATED_ID.search(a["id"]):
         return f"{tag}#{a['id']}"
-    cls = (a.get("class") or "").split()
+    cls = [c for c in (a.get("class") or "").split() if CSS_NAME.fullmatch(c)]
     return f"{tag}.{cls[0]}" if cls else tag
 
 
@@ -86,7 +90,15 @@ class PageParser(HTMLParser):
 
     def handle_starttag(self, tag, attrs):
         a = dict(attrs)
-        if tag not in VOID_TAGS:
+        if tag in AUTO_CLOSE:  # <li> без </li>: следующий <li> закрывает предыдущий, как в браузере
+            for i in range(len(self._stack) - 1, -1, -1):
+                t = self._stack[i][0]
+                if t in AUTO_CLOSE[tag]:
+                    break
+                if t == tag:
+                    del self._stack[i:]
+                    break
+        if tag not in VOID_TAGS and len(self._stack) < MAX_DEPTH:
             self._stack.append((tag, a))
         for key in ("id", "name"):
             if a.get(key):

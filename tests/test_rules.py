@@ -87,6 +87,13 @@ class LinkLocationTest(unittest.TestCase):
         self.assertEqual(node_token("div", {"id": "bx_basketFKauiI", "class": "cart"}), "div.cart")
         self.assertEqual(node_token("div", {"id": "header-cart-line"}), "div#header-cart-line")
 
+    def test_locator_survives_tricky_html(self):
+        p = PageParser()
+        p.feed('<ul class="m"><li><a href="">1</a><li class="md:flex x"><a href="https://s.ru/d#top">2</a></ul>')
+        one, two = p.links
+        self.assertEqual(two["path"], "ul.m > li.x > a")
+        self.assertEqual(where(two), '`ul.m > li.x > a[href$="/d#top"]`')
+
     def test_old_crawl_without_location_falls_back_to_text(self):
         self.assertEqual(where({"tag": "a", "raw": "", "text": "Профиль"}), "Профиль")
 
