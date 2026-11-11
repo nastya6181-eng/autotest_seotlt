@@ -1,6 +1,6 @@
 # Автотесты сайтов SEOTLT
 
-> Как запускать проверки: [PIPELINES.md](PIPELINES.md)
+> **📊 [Метрики](https://github.com/nastya6181-eng/autotest_seotlt/blob/metrics/METRICS.md)** · как запускать проверки: [PIPELINES.md](PIPELINES.md)
 
 [![Common checks](https://github.com/nastya6181-eng/autotest_seotlt/actions/workflows/common-checks.yml/badge.svg)](https://github.com/nastya6181-eng/autotest_seotlt/actions/workflows/common-checks.yml)
 
@@ -298,7 +298,7 @@ infra ──► tests (site-a) ─┐
 
 ## Метрики
 
-**Где смотреть:** вкладка **Issues** → закреплённая сверху задача **«📊 Метрики автотестов»**. Она переписывается сама после каждого прогона: коротко простыми словами, затем таблицы по сайтам, задачам и прогонам. То же — в Summary последнего прогона Metrics.
+**Где смотреть:** ссылка **📊 Метрики** в самом начале README — страница [`METRICS.md`](https://github.com/nastya6181-eng/autotest_seotlt/blob/metrics/METRICS.md) в ветке `metrics`, открывается прямо в GitHub. Переписывается сама после каждого прогона: коротко простыми словами, затем таблицы по сайтам, задачам и прогонам. То же — в Summary последнего прогона Metrics.
 
 **Графики:** https://nastya6181-eng.github.io/autotest_seotlt/ — те же цифры, три вопроса:
 

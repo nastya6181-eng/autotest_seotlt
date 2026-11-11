@@ -1,6 +1,6 @@
 name: Metrics
 
-# Метрики: закреплённая задача «📊 Метрики» во вкладке Issues и графики на GitHub Pages.
+# Метрики: файл METRICS.md в ветке metrics (ссылка первой строкой README) и графики на GitHub Pages.
 # Пересобираются после каждого прогона проверок, при изменении задач и вручную.
 on:
   workflow_dispatch:
@@ -25,8 +25,8 @@ jobs:
   build:
     runs-on: ubuntu-latest
     permissions:
-      contents: read
-      issues: write       # закреплённая задача с метриками
+      contents: write     # METRICS.md в ветку metrics
+      issues: read
       actions: read
     outputs:
       pages: ${{ steps.pages.outputs.enabled }}
@@ -59,10 +59,8 @@ jobs:
           python checks/core/dashboard.py --summary site/data.json --dashboard-url "$DASHBOARD_URL" > metrics.md
           cat metrics.md >> "$GITHUB_STEP_SUMMARY"
 
-      - name: Задача «📊 Метрики» во вкладке Issues
-        env:
-          GH_TOKEN: ${{ github.token }}
-        run: bash checks/core/publish_metrics_issue.sh metrics.md
+      - name: METRICS.md в ветку metrics
+        run: bash checks/core/publish_metrics_file.sh metrics.md
 
       - name: Дашборд архивом (если Pages не включены)
         uses: actions/upload-artifact@v7
