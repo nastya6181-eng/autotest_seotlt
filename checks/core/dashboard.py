@@ -24,6 +24,7 @@ CHECK_WORKFLOWS = {"Common checks", "Design checks"}
 WORK_LABELS = ["site-fix", "design", "coverage", "autotest", "enhancement", "dependencies"]
 SLA_DAYS = {"site-fix": 14}          # задача с этой меткой старше N дней — просрочена
 WEEKS = 12
+METRICS_LABEL = "metrics"            # задача с метриками сама в подсчёт задач не входит
 RUN_DAYS = 30
 
 
@@ -61,13 +62,14 @@ def gh_all(path, token, key=None, limit=None):
 
 
 def fetch_github(repo, token):
-    issues = [i for i in gh_all(f"/repos/{repo}/issues?state=all", token) if "pull_request" not in i]
+    issues = [i for i in gh_all(f"/repos/{repo}/issues?state=all", token)
+              if "pull_request" not in i and METRICS_LABEL not in {lb["name"] for lb in i.get("labels", [])}]
     milestones = gh_all(f"/repos/{repo}/milestones?state=all", token)
     since = (now() - dt.timedelta(days=RUN_DAYS)).date().isoformat()
     runs = gh_all(f"/repos/{repo}/actions/runs?created=%3E%3D{since}", token, key="workflow_runs")
     for r in runs:  # почему упал прогон проверок: дефекты сайта или инфраструктура
         r["reason"] = None
-        if r.get("name") in CHECK_WORKFLOWS and r.get("conclusion") == "failure":
+        if workflow_name(r) in CHECK_WORKFLOWS and r.get("conclusion") == "failure":
             jobs = gh_all(f"/repos/{repo}/actions/runs/{r['id']}/jobs", token, key="jobs")
             r["reason"] = failure_reason(jobs)
     return issues, milestones, runs
@@ -125,8 +127,9 @@ def issues_metrics(issues, today=None):
 
 
 def workflow_name(run):
-    """Прогоны Dependabot называются «pip in /. - Update #…» — сводим в одну строку."""
-    name = run.get("name") or ""
+    """Пайплайн прогона. У ручных прогонов в имени сайт («Common checks · lazun»), у Dependabot —
+    пакет («pip in /. - Update #…»): сводим к имени пайплайна."""
+    name = (run.get("name") or "").split(" · ")[0]
     return "Dependabot" if " in /" in name and "Update #" in name else name
 
 
@@ -205,25 +208,82 @@ def build(history_dir, repo=None, token=None):
     }
 
 
-def summary_md(data):
-    """Ключевые цифры для сводки прогона — видны и без Pages."""
-    lines = ["## Метрики автотестов", ""]
-    i, r = data.get("issues"), data.get("runs")
+def plural(n, one, few, many):
+    n = abs(n)
+    if n % 10 == 1 and n % 100 != 11:
+        return one
+    return few if 2 <= n % 10 <= 4 and not 12 <= n % 100 <= 14 else many
+
+
+def trend(values):
+    if len(values) < 2:
+        return "первый прогон"
+    diff = values[-1] - values[-2]
+    if diff == 0:
+        return "без изменений"
+    return f"{'хуже' if diff > 0 else 'лучше'} на {abs(diff)} (было {values[-2]})"
+
+
+def report_md(data, dashboard_url=""):
+    """Метрики простым текстом и таблицами — для закреплённой задачи и сводки прогона."""
+    i, r, q = data.get("issues"), data.get("runs"), data.get("quality", [])
+    out = ["# 📊 Метрики автотестов", "",
+           f"Обновлено {data['generated_at']}. Обновляется само после каждого прогона проверок и при изменении задач."
+           + (f" Те же цифры графиками: {dashboard_url}" if dashboard_url else ""), "", "## Коротко", ""]
+    for s in q:
+        last = s["last"]
+        kind = "макет" if s["workflow"] == "design" else "контент и ссылки"
+        out.append(f"- **{s['name']}** ({kind}): {s['defects'][-1]} {plural(s['defects'][-1], 'замечание', 'замечания', 'замечаний')}, "
+                   f"из них критичных {last['errors']} — {trend(s['defects'])}.")
     if i:
-        lines.append(f"- Задач открыто: **{i['total_open']}**, за 7 дней +{i['opened_7d']} / −{i['closed_7d']}, "
-                     f"медиана до закрытия: {i['median_close_days'] if i['median_close_days'] is not None else '—'} дн., "
-                     f"просрочено site-fix: {i['overdue']}")
-    if r:
-        for name, w in r["by_workflow"].items():
-            lines.append(f"- {name} за {r['days']} дн.: зелёных {w['success']}, дефекты сайта {w['defects']}, "
-                         f"инфраструктура {w['infra']}, отменены {w['other']}")
-    for q in data.get("quality", []):
-        last = q["last"]
-        lines.append(f"- {q['name']} ({q['workflow']}): последний прогон {last['at'][:16]} — критичных {last['errors']}, "
-                     f"дефектов {last['warnings']}, рекомендаций {last['info']}")
-    if len(lines) == 2:
-        lines.append("Данных пока нет.")
-    return "\n".join(lines) + "\n"
+        out.append(f"- **Задачи:** открыто {i['total_open']}; за 7 дней заведено {i['opened_7d']}, закрыто {i['closed_7d']}"
+                   + (f"; просрочено `site-fix`: **{i['overdue']}**" if i["overdue"] else "") + ".")
+    checks = {n: w for n, w in (r or {}).get("by_workflow", {}).items() if n in CHECK_WORKFLOWS}
+    if checks:
+        total = sum(w["success"] + w["defects"] + w["infra"] for w in checks.values())
+        out.append(f"- **Прогоны проверок за {r['days']} дней:** {total}; нашли дефекты сайта — "
+                   f"{sum(w['defects'] for w in checks.values())}, сломались сами проверки — "
+                   f"{sum(w['infra'] for w in checks.values())}, чисто — {sum(w['success'] for w in checks.values())}.")
+    if not q and not i:
+        out.append("Данных пока нет: запусти Common checks или Design checks.")
+
+    if q:
+        out += ["", "## Сайты", "",
+                "Замечания — всё, что нашли проверки: **критичные** (сломано, чинить первым), **дефекты** (видно посетителю), "
+                "**рекомендации** (желательно). «Динамика» — сравнение с прошлым прогоном того же сайта.", "",
+                "| сайт | проверка | когда | критичных | дефектов | рекомендаций | динамика | отчёт |", "|---|---|---|---|---|---|---|---|"]
+        for s in q:
+            last = s["last"]
+            link = f"[прогон]({last['run_url']})" if last.get("run_url") else ""
+            out.append(f"| {s['name']} | {'макет' if s['workflow'] == 'design' else 'контент'} | {last['at'][:16]} | "
+                       f"{last['errors']} | {last['warnings']} | {last['info']} | {trend(s['defects'])} | {link} |")
+        out += ["", "**Что чаще всего находят** — правила последнего прогона; число — сколько раз встретилось "
+                "по всем страницам (одна ошибка в шапке считается на каждой странице, поэтому больше числа замечаний выше):", ""]
+        for s in q:
+            top = sorted(((rr["counts"][-1], rr["rule"]) for rr in s["heat"]["rules"] if rr["counts"][-1]), reverse=True)[:5]
+            if top:
+                out.append(f"- {s['name']}: " + ", ".join(f"`{rule}` — {n}" for n, rule in top))
+
+    if i:
+        out += ["", "## Задачи", "", "| метка | открыто | закрыто |", "|---|---|---|"]
+        out += [f"| `{k}` | {v['open']} | {v['closed']} |" for k, v in i["labels"].items()]
+        if data.get("milestones"):
+            out += ["", "**Этапы:**", ""]
+            out += [f"- [{m['title']}]({m['url']}): закрыто {m['closed']} из {m['open'] + m['closed']}"
+                    + (f", срок {m['due']}" if m["due"] else "") for m in data["milestones"]]
+        if i["oldest"]:
+            out += ["", "**Дольше всего открыты:**", ""]
+            out += [f"- #{o['number']} {o['title']} — {o['age']} {plural(o['age'], 'день', 'дня', 'дней')}"
+                    + (" ⚠ просрочено" if o["overdue"] else "") for o in i["oldest"][:5]]
+
+    if checks:
+        out += ["", f"## Прогоны проверок за {r['days']} дней", "",
+                "«Дефекты сайта» — проверки отработали и нашли, что чинить на сайте. «Сломались проверки» — упал обход, "
+                "браузер или сборщик: это чинить в репозитории.", "",
+                "| пайплайн | чисто | дефекты сайта | сломались проверки | отменены | обычно идёт |", "|---|---|---|---|---|---|"]
+        out += [f"| {n} | {w['success']} | {w['defects']} | {w['infra']} | {w['other']} | "
+                f"{str(w['median_min']) + ' мин' if w['median_min'] else '—'} |" for n, w in checks.items()]
+    return "\n".join(out) + "\n"
 
 
 def main():
@@ -231,11 +291,12 @@ def main():
     ap.add_argument("--history", help="папка history из ветки metrics")
     ap.add_argument("--repo", default=os.environ.get("GITHUB_REPOSITORY"))
     ap.add_argument("--out", default="site")
-    ap.add_argument("--summary", metavar="DATA_JSON", help="только напечатать ключевые цифры из готового data.json")
+    ap.add_argument("--summary", metavar="DATA_JSON", help="только напечатать метрики текстом из готового data.json")
+    ap.add_argument("--dashboard-url", default="", help="ссылка на графики для текста метрик")
     args = ap.parse_args()
     if args.summary:
         with open(args.summary, encoding="utf-8") as f:
-            print(summary_md(json.load(f)), end="")
+            print(report_md(json.load(f), args.dashboard_url), end="")
         return
     data = build(args.history, args.repo, os.environ.get("GITHUB_TOKEN"))
     os.makedirs(args.out, exist_ok=True)

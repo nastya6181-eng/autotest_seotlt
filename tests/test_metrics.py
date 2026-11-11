@@ -181,7 +181,25 @@ class QualityMetricsTest(unittest.TestCase):
 
 class SummaryTest(unittest.TestCase):
     def test_empty_data(self):
-        self.assertIn("Данных пока нет", dashboard.summary_md({"quality": [], "issues": None, "runs": None}))
+        md = dashboard.report_md({"generated_at": "now", "quality": [], "issues": None, "runs": None})
+        self.assertIn("Данных пока нет", md)
+
+    def test_plain_summary_with_trend_and_failure_kind(self):
+        rows = [history.record(summary("lazun", "lazun", f"2026-11-0{d} 10:00", errors=e, warnings=w), "content", str(d))
+                for d, e, w in ((1, 3, 130), (2, 3, 126))]
+        runs = dashboard.runs_metrics([
+            run("Common checks · lazun", "failure", "2026-11-10T10:00:00Z", reason="defects"),
+            run("Lint", "success", "2026-11-10T10:00:00Z"),
+        ], today=TODAY)
+        md = dashboard.report_md({"generated_at": "now", "quality": dashboard.quality_metrics(rows), "issues": None,
+                                  "runs": runs, "milestones": []})
+        self.assertIn("**lazun** (контент и ссылки): 129 замечаний, из них критичных 3 — лучше на 4 (было 133).", md)
+        self.assertIn("нашли дефекты сайта — 1, сломались сами проверки — 0", md)
+        self.assertNotIn("| Lint |", md)
+
+    def test_run_name_with_site_groups_into_workflow(self):
+        self.assertEqual(dashboard.workflow_name({"name": "Common checks · lazun"}), "Common checks")
+        self.assertEqual(dashboard.workflow_name({"name": "Design checks · innotech · main"}), "Design checks")
 
 
 if __name__ == "__main__":
