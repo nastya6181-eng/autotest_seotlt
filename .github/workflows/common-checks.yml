@@ -160,7 +160,7 @@ jobs:
       - name: Результаты чанка
         id: artifact
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: report-${{ matrix.site.key }}
           path: ${{ env.OUT }}
@@ -206,7 +206,7 @@ jobs:
           path: collected
 
       - name: Логи и отчёты одним архивом
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: logs-all
           path: |
