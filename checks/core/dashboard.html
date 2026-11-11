@@ -37,7 +37,9 @@ a { color:var(--accent); } .empty { color:var(--mute); font-size:14px; }
   <div class="kpis" id="kpis"></div>
 
   <h2>Качество сайтов</h2>
-  <p class="q">Становится ли лучше на сайтах? Дефекты (критичные и обычные, уникальные) по прогонам; таблица — какие правила падали в последних прогонах.</p>
+  <p class="q">Становится ли лучше на сайтах? График — сколько замечаний нашли в каждом прогоне (линия вниз — сайт чинят).
+  Таблица под ним: строка — что не так, столбец — дата прогона, число — сколько раз это нашли на всех страницах
+  (одна ошибка в шапке сайта считается на каждой странице). Число в правом столбце меньше левого — значит, починили.</p>
   <div class="grid" id="quality"></div>
 
   <h2>Задачи</h2>
@@ -82,8 +84,8 @@ const Q = document.getElementById("quality");
 if (!D.quality.length) Q.innerHTML = `<p class="empty">Истории прогонов пока нет — она появится после первого прогона Common или Design checks.</p>`;
 D.quality.forEach((s, idx) => {
   const kind = s.workflow === "design" ? "макет" : "контент и SEO";
-  const heat = s.heat.rules.length ? `<div class="wrapx"><table class="heat"><tr><th>правило</th>${s.heat.runs.map(r => `<th>${esc(r.slice(5))}</th>`).join("")}</tr>` +
-    s.heat.rules.map(r => `<tr><td>${esc(r.rule)}</td>${r.counts.map(c => `<td class="n" style="background:${c ? `color-mix(in srgb, ${css("--bad")} ${Math.min(15 + c, 70)}%, transparent)` : "transparent"}">${c || ""}</td>`).join("")}</tr>`).join("") + `</table></div>` : `<p class="empty">Правил с замечаниями нет.</p>`;
+  const heat = s.heat.rules.length ? `<div class="wrapx"><table class="heat"><tr><th>что не так</th>${s.heat.runs.map(r => `<th>${esc(r.slice(8, 10) + "." + r.slice(5, 7))}</th>`).join("")}</tr>` +
+    s.heat.rules.map(r => `<tr><td>${esc(r.title || r.rule)} <span class="pill">${esc(r.rule)}</span></td>${r.counts.map(c => `<td class="n" style="background:${c ? `color-mix(in srgb, ${css("--bad")} ${Math.min(15 + c, 70)}%, transparent)` : "transparent"}">${c || ""}</td>`).join("")}</tr>`).join("") + `</table></div>` : `<p class="empty">Правил с замечаниями нет.</p>`;
   const l = s.last;
   Q.insertAdjacentHTML("beforeend", `<div class="card"><h3>${esc(s.name)} <span class="pill">${kind}</span></h3>
     <div class="q" style="margin:0 0 6px">последний прогон ${esc(l.at)}: <b class="${l.failed ? "bad" : "ok"}">${l.failed ? "есть дефекты" : "чисто"}</b>,
