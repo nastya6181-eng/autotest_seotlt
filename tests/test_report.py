@@ -46,7 +46,7 @@ class ReportTest(unittest.TestCase):
                              ["findings.csv", "junit.xml", "report.md", "summary.json", "summary.md"])
             page = open(os.path.join(out, "summary.md"), encoding="utf-8").read()
         self.assertEqual(code_digest(), before, "отчёт перезаписал файл кода")
-        self.assertIn("| /b/ | пн - пт | часы пн - пт |", page)
+        self.assertIn("| /b/ | пн - пт | часы пн - пт<br><sub>править в содержимом этой страницы</sub> |", page)
         self.assertIn("| /a/ | — |", page)
         self.assertIn("**Как исправить:**", page)
         self.assertIn("Правило в коде: `checks/content/seo.py:", page)
@@ -76,6 +76,21 @@ class ReportTest(unittest.TestCase):
         text = report.summary_text({**META, "failed": True, "fail_on": ["error"], "findings_unique": {"error": 1},
                                     "by_rule": {"links.page_failed": 1}}, rules, report.group([failed]), 200)
         self.assertIn("Страница не открылась: 403", text)
+
+    def test_same_bad_link_in_header_is_one_readable_row(self):
+        from checks.content.links import element
+        frag = element({"tag": "a", "raw": "", "text": "Профиль"})
+        rules = {"links.bad_href": ("error", "Неправильно оформленная ссылка")}
+        found = [Finding("links", "bad_href", "error", "Неправильно оформленная ссылка: пустой href", frag,
+                         f"https://site.ru/p{i}/", "Профиль") for i in range(136)]
+        text = report.summary_text({**META, "failed": True, "fail_on": ["error"], "findings_unique": {"error": 1},
+                                    "by_rule": {"links.bad_href": 1}}, rules, report.group(found), 200)
+        rows = [line for line in text.splitlines() if line.startswith("| /p")]
+        self.assertEqual(len(rows), 1)
+        self.assertIn('`<a href="">Профиль</a>`<br><sub>пустой href</sub>', rows[0])
+        self.assertIn("и ещё 135 стр.", rows[0])
+        self.assertIn("общий блок: править один раз в шаблоне", rows[0])
+        self.assertIn("**Как найти:** открыть страницу → F12", text)
 
     def test_summary_fits_github_limit(self):
         many = [Finding("spelling", "unknown_word", "warning", "Слово", f"слово{i}" * 10,

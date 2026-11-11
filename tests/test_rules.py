@@ -7,8 +7,9 @@ import sys
 import unittest
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))  # корень репозитория
-from checks.content.links import normalize  # noqa: E402
+from checks.content.links import normalize, where  # noqa: E402
 from checks.content.typography import PATTERNS  # noqa: E402
+from checks.core.crawler import PageParser  # noqa: E402
 
 
 def hits(rule, text):
@@ -57,6 +58,37 @@ class TypographyTest(unittest.TestCase):
     def test_number_range(self):
         self.assertCatches("number_range_hyphen", "с 10-20 мая", "10-20")
         self.assertClean("number_range_hyphen", "+7 (4842) 555-35-35")
+
+
+class LinkLocationTest(unittest.TestCase):
+    HTML = ('<html><body><header class="top line"><div class="user"><img src="/i.png"><br>'
+            '<a href="">Профиль</a></div></header>'
+            '<main><p>Текст <a href="https://site.ru/x/?a=1">тут</a></p></main>'
+            '<footer id="f"><a href="tel:123">звонок</a></footer></body></html>')
+
+    def links(self):
+        p = PageParser()
+        p.feed(self.HTML)
+        return {lk["text"] or lk["tag"]: lk for lk in p.links}
+
+    def test_block_and_path(self):
+        lk = self.links()
+        self.assertEqual((lk["Профиль"]["area"], lk["Профиль"]["path"]), ("шапка", "header.top > div.user > a"))
+        self.assertEqual(lk["тут"]["area"], "содержимое")
+        self.assertEqual(lk["звонок"]["path"], "footer#f > a")
+
+    def test_devtools_selector_without_own_domain(self):
+        lk = self.links()
+        self.assertEqual(where(lk["Профиль"]), 'шапка · `header.top > div.user > a[href=""]`')
+        self.assertEqual(where(lk["тут"]), 'содержимое · `main > p > a[href$="/x/?a=1"]`')
+
+    def test_generated_ids_skipped(self):
+        from checks.core.crawler import node_token
+        self.assertEqual(node_token("div", {"id": "bx_basketFKauiI", "class": "cart"}), "div.cart")
+        self.assertEqual(node_token("div", {"id": "header-cart-line"}), "div#header-cart-line")
+
+    def test_old_crawl_without_location_falls_back_to_text(self):
+        self.assertEqual(where({"tag": "a", "raw": "", "text": "Профиль"}), "Профиль")
 
 
 class LinksTest(unittest.TestCase):

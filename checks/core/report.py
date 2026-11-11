@@ -172,12 +172,19 @@ def format_test_log(name, rules, findings, fail_on, base="", limit=100):
             if f.fragment and f.fragment != f.page:
                 lines.append(f"       что:      «{show_fragment(f.fragment, base)[:120]}»")
             if f.message != title:
-                lines.append(f"       почему:   {scrub(f.message, base)[:160]}")
-            if f.context and f.context != f.fragment:
+                lines.append(f"       почему:   {scrub(f.message.removeprefix(f'{title}: '), base)[:160]}")
+            located = re.fullmatch(r"(?:(.+?) · )?`(.+)`", f.context or "")
+            if located:
+                area, selector = located.groups()
+                lines.append(f"       где:      {area + ', ' if area else ''}{scrub(selector, base)[:200]}")
+                lines.append("       найти:    F12 → Elements → Ctrl+F → вставить путь из строки «где»")
+            elif f.context and f.context != f.fragment:
                 lines.append(f"       контекст: …{scrub(f.context, base)[:140]}…")
             found = find_hint(f, pages[0], base)
             if found:
                 lines.append(f"       найти:    {found}")
+            if f.fragment and f.fragment != f.page:
+                lines.append(f"       править:  {fix_place(len(pages), 0)}")
             if len(pages) > 1:
                 lines.append(f"       то же ещё на {len(pages) - 1} стр.: {pages_line(pages[1:], base)}")
         rest = sum(len(g["pages"]) if not g["f"].fragment or g["f"].fragment == g["f"].page else 1 for g in rows) - shown
@@ -227,6 +234,21 @@ def link(url, base):
         label = cell(relative(url, base))[:150]
         return f"[{'/ (главная)' if label == '/' else label}]({url})"
     return shown
+
+
+HOW_TO_FIND = {
+    "links": "открыть страницу → F12 → вкладка Elements → Ctrl+F (⌘F) → вставить путь из колонки «где на странице», "
+             "браузер подсветит элемент.",
+    "typography": "открыть страницу → Ctrl+F (⌘F) → искать текст из колонки «что».",
+    "spelling": "открыть страницу → Ctrl+F (⌘F) → искать слово из колонки «что».",
+}
+
+
+def fix_place(found_on, pages_total):
+    """Общий блок (шапка, подвал, меню) правится один раз в шаблоне, остальное — на своей странице."""
+    if found_on >= 3 and found_on >= 0.3 * max(pages_total, 1):
+        return f"🧩 то же на {found_on} стр. — общий блок: править один раз в шаблоне сайта, не на каждой странице"
+    return "править в содержимом этой страницы" if found_on == 1 else f"править на каждой из {found_on} стр."
 
 
 MAX_SUMMARY_BYTES = 900_000  # GitHub не показывает сводку шага больше 1 МиБ
@@ -279,20 +301,26 @@ def summary_text(summary, rules, groups, limit):
             src, line = source(rule_id)
             f.write(f"\n<details><summary>{SEV_ICON[sev]} <b>{escape(title)}</b> — "
                     f"{sum(len(g['pages']) for g in rows)} <code>{rule_id}</code></summary>\n\n"
-                    f"**Как исправить:** {cell(hint(rule_id))}  \n"
-                    f"Правило в коде: `{src}:{line}`\n\n"
-                    "| страница | что | контекст |\n|---|---|---|\n")
+                    f"**Как исправить:** {escape(cell(hint(rule_id)))}  \n"
+                    f"Правило в коде: `{src}:{line}`  \n"
+                    + (f"**Как найти:** {HOW_TO_FIND[rule_id.split('.')[0]]}  \n"
+                       if rule_id.split(".")[0] in HOW_TO_FIND else "")
+                    + "\n| страница | что | где на странице / контекст |\n|---|---|---|\n")
             n = 0
             for g in rows:
                 y, pages = g["f"], g["pages"]
                 page_level = not y.fragment or y.fragment == y.page
-                what = "—" if page_level else cell(show_fragment(y.fragment, base))[:120]
+                what = "—" if page_level else f"`{cell(show_fragment(y.fragment, base))[:120].replace('`', chr(39))}`" \
+                    if y.fragment.startswith("<") else escape(cell(show_fragment(y.fragment, base))[:120])
                 found = "" if page_level else find_hint(y, pages[0], base)
                 if found.startswith("http") and len(found) <= 2000:
                     what = f"[{what}]({found})"
                 if y.message != title:
-                    what += f"<br><sub>{cell(scrub(y.message, base))[:120]}</sub>"
-                ctx = cell(scrub(y.context, base))[:160]
+                    detail = y.message.removeprefix(f"{title}: ")
+                    what += f"<br><sub>{escape(cell(scrub(detail, base))[:120])}</sub>"
+                ctx = cell(scrub(y.context, base))[:200]
+                if not page_level:
+                    ctx += f"<br><sub>{fix_place(len(pages), summary['pages'])}</sub>"
                 for p in pages if page_level else pages[:1]:
                     if n >= limit:
                         break

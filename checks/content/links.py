@@ -9,7 +9,7 @@ from urllib.parse import quote, unquote, urldefrag, urljoin, urlparse
 from urllib.request import HTTPRedirectHandler, Request, build_opener
 
 from checks.core import throttle
-from checks.core.crawler import RETRY_STATUSES, UA, retry_pause, same_site
+from checks.core.crawler import RETRY_STATUSES, SRC_TAGS, UA, retry_pause, same_site
 from checks.core.findings import make
 
 NAME = "links"
@@ -111,6 +111,28 @@ def normalize(raw, base):
     return quote(url, safe=":/?&=%#@+,;~!$'()*[]"), rule, problem
 
 
+def element(link):
+    """Ссылка так, как её искать в коде страницы: тег, href и текст."""
+    tag, text = link["tag"], link["text"][:60] + ("…" if len(link["text"]) > 60 else "")
+    if tag == "a":
+        return f'<a href="{link["raw"]}">{text}</a>'
+    return f'<{tag} {SRC_TAGS.get(tag, "src")}="{link["raw"]}">'
+
+
+def where(link):
+    """Где ссылка на странице: блок и путь для поиска в DevTools (F12 → Elements → Ctrl+F)."""
+    if not link.get("path"):
+        return link["text"]
+    attr = "href" if link["tag"] == "a" else SRC_TAGS.get(link["tag"], "src")
+    raw, op = link["raw"], "="
+    if re.match(r"(?i)^https?://", raw):  # без домена: адрес сайта в публичный отчёт не попадает
+        u = urlparse(raw)
+        raw, op = (u.path or "/") + (f"?{u.query}" if u.query else ""), "$="
+    raw = raw.replace('"', '\\"')
+    selector = re.sub(r"[^ >]+$", lambda m: f'{m.group(0)}[{attr}{op}"{raw}"]', link["path"])
+    return f"{link['area'] + ' · ' if link.get('area') else ''}`{selector}`"
+
+
 def run(pages, cfg, overrides, env):
     finding = make(NAME, RULES, overrides)
     host = urlparse(env["start_url"]).netloc
@@ -125,7 +147,7 @@ def run(pages, cfg, overrides, env):
         for link in page.links:
             url, rule, problem = normalize(link["raw"], page.url)
             if rule:
-                out.append(finding(rule, link["raw"], page.url, link["text"],
+                out.append(finding(rule, element(link), page.url, where(link),
                                    message=f"{RULES[rule][1]}: {problem}" if problem else None))
             if not url:
                 continue
@@ -134,11 +156,11 @@ def run(pages, cfg, overrides, env):
             if frag and link["tag"] == "a" and internal:
                 ids = page_ids.get(base)
                 if ids is not None and unquote(frag) not in ids:
-                    out.append(finding("missing_anchor", f"{base}#{frag}", page.url, link["text"]))
+                    out.append(finding("missing_anchor", f"{base}#{frag}", page.url, where(link)))
             if link["tag"] == "a" and not internal and not link.get("blank"):
-                out.append(finding("external_same_tab", url, page.url, link["text"]))
+                out.append(finding("external_same_tab", url, page.url, where(link)))
             if (internal or external) and not (skip and skip.search(base)):
-                uses[base].append((page.url, link["text"] or link["tag"]))
+                uses[base].append((page.url, where(link) or link["tag"]))
 
     with ThreadPoolExecutor(cfg.get("workers", 3)) as pool:
         results = dict(zip(uses, pool.map(check_url, uses)))
