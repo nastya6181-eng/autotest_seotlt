@@ -205,6 +205,9 @@ jobs:
           pattern: report-*
           path: collected
 
+      - name: Один сайт — тоже в свою папку
+        run: python checks/core/collect.py collected
+
       - name: Логи и отчёты одним архивом
         uses: actions/upload-artifact@v7
         with:
