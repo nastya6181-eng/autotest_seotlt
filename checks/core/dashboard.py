@@ -179,7 +179,7 @@ def rule_titles():
                 continue
             for k, v in zip(node.value.keys, node.value.values):
                 if (isinstance(k, ast.Constant) and isinstance(v, ast.Tuple) and len(v.elts) > 1
-                        and isinstance(v.elts[1], ast.Constant)):
+                        and isinstance(v.elts[1], ast.Constant) and isinstance(v.elts[1].value, str)):
                     titles[f"{check}.{k.value}"] = v.elts[1].value
     return titles
 
