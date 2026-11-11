@@ -48,7 +48,7 @@ jobs:
     outputs:
       sites: ${{ steps.sites.outputs.sites }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
       - uses: actions/setup-python@v5
         with:
@@ -109,7 +109,7 @@ jobs:
       CHECKS: ${{ inputs.checks }}
       OUT: reports/${{ matrix.site.key }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
       - uses: actions/setup-python@v5
         with:
@@ -187,7 +187,7 @@ jobs:
       contents: write     # история в ветку metrics
       checks: write       # результаты тестов во вкладку Checks
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
       - uses: actions/setup-python@v5
         with:
