@@ -1,0 +1,94 @@
+name: Metrics
+
+# Дашборд: качество сайтов, задачи, пайплайны — https://<владелец>.github.io/<репозиторий>/
+# Пересобирается после каждого прогона проверок, при изменении задач и вручную.
+on:
+  workflow_dispatch:
+  workflow_run:
+    workflows: [Common checks, Design checks]
+    types: [completed]
+  issues:
+    types: [opened, closed, reopened, labeled, unlabeled, milestoned, demilestoned]
+
+concurrency:
+  group: metrics
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+defaults:
+  run:
+    shell: bash
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      issues: read
+      actions: read
+    outputs:
+      pages: ${{ steps.pages.outputs.enabled }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: main
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: История прогонов из ветки metrics
+        run: |
+          if git ls-remote --exit-code origin metrics >/dev/null; then
+            git fetch -q --depth=1 origin metrics && git worktree add -q m origin/metrics
+          else
+            mkdir -p m/history
+          fi
+
+      - name: Собрать дашборд
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+        run: python checks/core/dashboard.py --history m/history --out site
+
+      - name: Ключевые цифры в сводку
+        run: python checks/core/dashboard.py --summary site/data.json >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Дашборд архивом (если Pages не включены)
+        uses: actions/upload-artifact@v4
+        with:
+          name: dashboard
+          path: site
+          retention-days: 30
+
+      - name: Включены ли GitHub Pages
+        id: pages
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          if gh api "repos/$GITHUB_REPOSITORY/pages" --jq .build_type 2>/dev/null | grep -qx workflow; then
+            echo "enabled=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "enabled=false" >> "$GITHUB_OUTPUT"
+            echo "::notice::GitHub Pages не включены (Settings → Pages → Source: GitHub Actions) — дашборд только в архиве dashboard"
+          fi
+
+      - if: steps.pages.outputs.enabled == 'true'
+        uses: actions/upload-pages-artifact@v3
+        with:
+          path: site
+
+  deploy:
+    needs: build
+    if: needs.build.outputs.pages == 'true'
+    runs-on: ubuntu-latest
+    permissions:
+      pages: write
+      id-token: write
+    environment:
+      name: github-pages
+      url: ${{ steps.deploy.outputs.page_url }}
+    steps:
+      - id: deploy
+        uses: actions/deploy-pages@v4

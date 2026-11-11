@@ -1,0 +1,129 @@
+<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Метрики автотестов</title>
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
+<style>
+:root { --bg:#f5f7f6; --card:#fff; --ink:#1b2321; --mute:#5d6a65; --line:#dbe3df; --accent:#07805f;
+        --ok:#1a7f37; --bad:#cf222e; --warn:#b26a00; --info:#6e7781; --infra:#8250df; }
+@media (prefers-color-scheme: dark) { :root { --bg:#111816; --card:#18211e; --ink:#e7eeeb; --mute:#94a39d; --line:#2b3934;
+        --accent:#3fd8a8; --ok:#3fb950; --bad:#ff6b60; --warn:#f0a63a; --info:#8b949e; --infra:#b392f0; } }
+* { box-sizing: border-box; }
+body { margin:0; background:var(--bg); color:var(--ink); font:15px/1.5 -apple-system, "Segoe UI", Roboto, sans-serif; }
+.wrap { max-width:1200px; margin:0 auto; padding:24px 16px 48px; }
+h1 { font-size:24px; margin:0 0 4px; } h2 { font-size:18px; margin:32px 0 4px; }
+.q { color:var(--mute); margin:0 0 14px; font-size:14px; }
+.meta { color:var(--mute); font-size:13px; margin-bottom:18px; }
+.kpis { display:grid; grid-template-columns:repeat(auto-fit, minmax(150px, 1fr)); gap:10px; }
+.kpi, .card { background:var(--card); border:1px solid var(--line); border-radius:10px; padding:12px 14px; }
+.kpi b { display:block; font-size:24px; font-variant-numeric:tabular-nums; } .kpi span { color:var(--mute); font-size:13px; }
+.grid { display:grid; grid-template-columns:repeat(auto-fit, minmax(340px, 1fr)); gap:12px; }
+.card h3 { font-size:15px; margin:0 0 6px; } .card canvas { max-height:240px; }
+.wrapx { overflow-x:auto; } table { border-collapse:collapse; width:100%; font-size:13px; }
+th, td { border-bottom:1px solid var(--line); padding:5px 6px; text-align:left; vertical-align:top; }
+td.n { text-align:right; font-variant-numeric:tabular-nums; } th { color:var(--mute); font-weight:600; }
+.pill { display:inline-block; padding:1px 7px; border-radius:10px; font-size:12px; background:var(--line); margin:1px 2px 1px 0; }
+.bad { color:var(--bad); } .ok { color:var(--ok); } .heat td.n { min-width:34px; }
+.bar { height:10px; border-radius:5px; background:var(--line); overflow:hidden; } .bar i { display:block; height:100%; background:var(--accent); }
+a { color:var(--accent); } .empty { color:var(--mute); font-size:14px; }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <h1>Метрики автотестов</h1>
+  <div class="meta" id="meta"></div>
+  <div class="kpis" id="kpis"></div>
+
+  <h2>Качество сайтов</h2>
+  <p class="q">Становится ли лучше на сайтах? Дефекты (критичные и обычные, уникальные) по прогонам; таблица — какие правила падали в последних прогонах.</p>
+  <div class="grid" id="quality"></div>
+
+  <h2>Задачи</h2>
+  <p class="q">Успеваем ли? Открыто и закрыто по неделям, сколько открыто на конец недели, по меткам; самые старые открытые (просрочка по SLA — красным).</p>
+  <div class="grid">
+    <div class="card"><h3>По неделям</h3><canvas id="issuesChart"></canvas></div>
+    <div class="card"><h3>По меткам: открыто / закрыто</h3><div id="labels"></div></div>
+  </div>
+  <div class="card" style="margin-top:12px"><h3>Этапы</h3><div id="milestones"></div></div>
+  <div class="card" style="margin-top:12px"><h3>Самые старые открытые</h3><div class="wrapx" id="oldest"></div></div>
+
+  <h2>Пайплайны</h2>
+  <p class="q">Не сломалась ли инфраструктура? Прогоны за последние дни: зелёные, красные из-за дефектов сайта и красные из-за инфраструктуры — это разные вещи.</p>
+  <div class="grid">
+    <div class="card"><h3>Итоги прогонов</h3><canvas id="runsChart"></canvas></div>
+    <div class="card"><h3>Последние прогоны</h3><div class="wrapx" id="recent"></div></div>
+  </div>
+</div>
+<script>
+const D = __DATA__;
+const css = v => getComputedStyle(document.documentElement).getPropertyValue(v).trim();
+const esc = s => String(s ?? "").replace(/[&<>"]/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]));
+Chart.defaults.color = css("--mute"); Chart.defaults.borderColor = css("--line"); Chart.defaults.font.family = getComputedStyle(document.body).fontFamily;
+
+document.getElementById("meta").textContent = `${D.repo} · обновлено ${D.generated_at}`;
+const I = D.issues, R = D.runs;
+const runsTotal = R ? Object.values(R.by_workflow).reduce((a, w) => a + w.success + w.defects + w.infra, 0) : 0;
+const runsOk = R ? Object.values(R.by_workflow).reduce((a, w) => a + w.success, 0) : 0;
+const infra = R ? Object.values(R.by_workflow).reduce((a, w) => a + w.infra, 0) : 0;
+const kpis = [
+  [I ? I.total_open : "—", "задач открыто"],
+  [I ? `+${I.opened_7d} / −${I.closed_7d}` : "—", "открыто / закрыто за 7 дней"],
+  [I && I.median_close_days !== null ? `${I.median_close_days} дн.` : "—", "медиана до закрытия"],
+  [I ? I.overdue : "—", "просрочено site-fix (> 14 дн.)"],
+  [R ? `${runsOk} из ${runsTotal}` : "—", `зелёных прогонов за ${R ? R.days : 30} дней`],
+  [R ? infra : "—", "падений из-за инфраструктуры"],
+];
+document.getElementById("kpis").innerHTML = kpis.map(([v, t]) => `<div class="kpi"><b>${esc(v)}</b><span>${esc(t)}</span></div>`).join("");
+
+// качество
+const Q = document.getElementById("quality");
+if (!D.quality.length) Q.innerHTML = `<p class="empty">Истории прогонов пока нет — она появится после первого прогона Common или Design checks.</p>`;
+D.quality.forEach((s, idx) => {
+  const kind = s.workflow === "design" ? "макет" : "контент и SEO";
+  const heat = s.heat.rules.length ? `<div class="wrapx"><table class="heat"><tr><th>правило</th>${s.heat.runs.map(r => `<th>${esc(r.slice(5))}</th>`).join("")}</tr>` +
+    s.heat.rules.map(r => `<tr><td>${esc(r.rule)}</td>${r.counts.map(c => `<td class="n" style="background:${c ? `color-mix(in srgb, ${css("--bad")} ${Math.min(15 + c, 70)}%, transparent)` : "transparent"}">${c || ""}</td>`).join("")}</tr>`).join("") + `</table></div>` : `<p class="empty">Правил с замечаниями нет.</p>`;
+  const l = s.last;
+  Q.insertAdjacentHTML("beforeend", `<div class="card"><h3>${esc(s.name)} <span class="pill">${kind}</span></h3>
+    <div class="q" style="margin:0 0 6px">последний прогон ${esc(l.at)}: <b class="${l.failed ? "bad" : "ok"}">${l.failed ? "есть дефекты" : "чисто"}</b>,
+    критичных ${l.errors}, дефектов ${l.warnings}, рекомендаций ${l.info}, страниц ${l.pages}${l.run_url ? ` · <a href="${esc(l.run_url)}">прогон</a>` : ""}</div>
+    <canvas id="q${idx}"></canvas>${heat}</div>`);
+  new Chart(document.getElementById(`q${idx}`), { type: "line",
+    data: { labels: s.dates.map(d => d.slice(5)), datasets: [
+      { label: "дефекты", data: s.defects, borderColor: css("--warn"), backgroundColor: css("--warn"), tension: .2 },
+      { label: "из них критичные", data: s.errors, borderColor: css("--bad"), backgroundColor: css("--bad"), tension: .2 }] },
+    options: { plugins: { legend: { position: "bottom" } }, scales: { y: { beginAtZero: true } } } });
+});
+
+// задачи
+if (I) {
+  new Chart(document.getElementById("issuesChart"), { data: { labels: I.weeks.map(w => w.slice(5)), datasets: [
+      { type: "bar", label: "открыто за неделю", data: I.opened, backgroundColor: css("--warn") },
+      { type: "bar", label: "закрыто за неделю", data: I.closed, backgroundColor: css("--ok") },
+      { type: "line", label: "открыто на конец недели", data: I.open_at, borderColor: css("--accent"), backgroundColor: css("--accent"), tension: .2 }] },
+    options: { plugins: { legend: { position: "bottom" } }, scales: { y: { beginAtZero: true } } } });
+  const L = Object.entries(I.labels);
+  document.getElementById("labels").innerHTML = L.length ? `<table>${L.map(([k, v]) => { const t = v.open + v.closed;
+    return `<tr><td><span class="pill">${esc(k)}</span></td><td class="n">${v.open} / ${v.closed}</td><td style="width:45%"><div class="bar"><i style="width:${t ? 100 * v.closed / t : 0}%"></i></div></td></tr>`; }).join("")}</table>` : `<p class="empty">Задач с рабочими метками нет.</p>`;
+  document.getElementById("oldest").innerHTML = I.oldest.length ? `<table><tr><th>#</th><th>задача</th><th>метки</th><th class="n">дней</th></tr>` +
+    I.oldest.map(o => `<tr><td><a href="${esc(o.url)}">#${o.number}</a></td><td>${esc(o.title)}</td><td>${o.labels.map(x => `<span class="pill">${esc(x)}</span>`).join("")}</td><td class="n ${o.overdue ? "bad" : ""}">${o.age}${o.overdue ? " ⚠" : ""}</td></tr>`).join("") + `</table>` : `<p class="empty">Открытых задач нет.</p>`;
+} else { ["labels", "oldest"].forEach(id => document.getElementById(id).innerHTML = `<p class="empty">Нет данных GitHub (нужен токен).</p>`); }
+document.getElementById("milestones").innerHTML = D.milestones.length ? `<table>${D.milestones.map(m => { const t = m.open + m.closed;
+  return `<tr><td><a href="${esc(m.url)}">${esc(m.title)}</a></td><td class="n">${m.closed} из ${t}</td><td style="width:45%"><div class="bar"><i style="width:${t ? 100 * m.closed / t : 0}%"></i></div></td><td>${m.due ? "до " + esc(m.due) : ""}</td></tr>`; }).join("")}</table>` : `<p class="empty">Этапов нет.</p>`;
+
+// пайплайны
+if (R) {
+  const W = Object.entries(R.by_workflow);
+  new Chart(document.getElementById("runsChart"), { type: "bar", data: { labels: W.map(([n, w]) => `${n}${w.median_min ? ` (${w.median_min} мин)` : ""}`), datasets: [
+      { label: "зелёные", data: W.map(([, w]) => w.success), backgroundColor: css("--ok") },
+      { label: "дефекты сайта", data: W.map(([, w]) => w.defects), backgroundColor: css("--warn") },
+      { label: "инфраструктура", data: W.map(([, w]) => w.infra), backgroundColor: css("--infra") },
+      { label: "отменены / ждали", data: W.map(([, w]) => w.other), backgroundColor: css("--info") }] },
+    options: { indexAxis: "y", plugins: { legend: { position: "bottom" } }, scales: { x: { stacked: true, beginAtZero: true }, y: { stacked: true } } } });
+  const label = r => r.conclusion === "success" ? `<span class="ok">✔</span>` : r.conclusion === "failure" ? `<span class="bad">✘ ${r.reason === "defects" ? "дефекты" : r.reason === "infra" ? "инфра" : ""}</span>` : esc(r.conclusion);
+  document.getElementById("recent").innerHTML = `<table>${R.recent.map(r => `<tr><td>${esc(r.at)}</td><td><a href="${esc(r.url)}">${esc(r.name)}</a></td><td>${label(r)}</td></tr>`).join("")}</table>`;
+} else { document.getElementById("recent").innerHTML = `<p class="empty">Нет данных GitHub (нужен токен).</p>`; }
+</script>
+</body>
+</html>
