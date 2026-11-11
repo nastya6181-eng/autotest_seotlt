@@ -127,9 +127,13 @@ def where(link):
     raw, op = link["raw"], "="
     if re.match(r"(?i)^https?://", raw):  # без домена: адрес сайта в публичный отчёт не попадает
         u = urlparse(raw)
-        raw, op = (u.path or "/") + (f"?{u.query}" if u.query else "") + (f"#{u.fragment}" if u.fragment else ""), "$="
-    raw = raw.replace('"', '\\"')
-    selector = re.sub(r"[^ >]+$", lambda m: f'{m.group(0)}[{attr}{op}"{raw}"]', link["path"])
+        raw, op = u.path + (f"?{u.query}" if u.query else "") + (f"#{u.fragment}" if u.fragment else ""), "$="
+    if len(raw) > 80:
+        raw, op = (raw[-80:], "$=") if op == "$=" else (raw[:80], "^=")
+    if (op == "$=" and not raw) or re.search(r'[\\\n\r"]', raw):
+        selector = link["path"]  # такой адрес в селектор не вставить без экранирования — ищем по пути
+    else:
+        selector = re.sub(r"[^ >]+$", lambda m: f'{m.group(0)}[{attr}{op}"{raw}"]', link["path"])
     return f"{link['area'] + ' · ' if link.get('area') else ''}`{selector}`"
 
 

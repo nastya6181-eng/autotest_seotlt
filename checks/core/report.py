@@ -176,7 +176,7 @@ def format_test_log(name, rules, findings, fail_on, base="", limit=100):
             located = re.fullmatch(r"(?:(.+?) · )?`(.+)`", f.context or "")
             if located:
                 area, selector = located.groups()
-                lines.append(f"       где:      {area + ', ' if area else ''}{scrub(selector, base)[:200]}")
+                lines.append(f"       где:      {area + ', ' if area else ''}{scrub(selector, base)}")
                 lines.append("       найти:    F12 → Elements → Ctrl+F → вставить путь из строки «где»")
             elif f.context and f.context != f.fragment:
                 lines.append(f"       контекст: …{scrub(f.context, base)[:140]}…")
@@ -318,7 +318,7 @@ def summary_text(summary, rules, groups, limit):
                 if y.message != title:
                     detail = y.message.removeprefix(f"{title}: ")
                     what += f"<br><sub>{escape(cell(scrub(detail, base))[:120])}</sub>"
-                ctx = cell(scrub(y.context, base))[:200]
+                ctx = cell(scrub(y.context, base))[:400]
                 if not page_level:
                     ctx += f"<br><sub>{fix_place(len(pages), summary['pages'])}</sub>"
                 for p in pages if page_level else pages[:1]:

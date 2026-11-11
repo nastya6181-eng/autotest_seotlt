@@ -35,6 +35,9 @@ AREAS = [("шапка", ("header",), ("header", "top-bar", "topbar")),
 
 CSS_NAME = re.compile(r"-?[A-Za-z_][\w-]*")  # md:flex, w-1/2 без экранирования селектор ломают
 MAX_DEPTH = 256
+P_CLOSERS = {"div", "ul", "ol", "dl", "table", "section", "article", "aside", "header", "footer", "nav", "main",
+             "form", "h1", "h2", "h3", "h4", "h5", "h6", "blockquote", "pre", "hr", "figure", "address", "fieldset"}
+INLINE_TAGS = {"a", "span", "b", "i", "em", "strong", "small", "u", "s", "sub", "sup", "mark", "label", "abbr", "font"}
 AUTO_CLOSE = {"li": {"ul", "ol"}, "p": {"div", "section", "article", "td"}, "tr": {"table", "tbody", "thead"},
               "td": {"tr"}, "th": {"tr"}, "option": {"select"}, "dt": {"dl"}, "dd": {"dl"}}
 GENERATED_ID = re.compile(r"^(bx_|comp_|ember|react-|yui_)|\d{3,}|[a-z][A-Z]{2}|[A-Z][a-z][A-Z]")
@@ -97,6 +100,14 @@ class PageParser(HTMLParser):
                     break
                 if t == tag:
                     del self._stack[i:]
+                    break
+        if tag in P_CLOSERS:  # блок внутри <p> браузер не вкладывает: абзац закрывается
+            for i in range(len(self._stack) - 1, -1, -1):
+                t = self._stack[i][0]
+                if t == "p":
+                    del self._stack[i:]
+                    break
+                if t not in INLINE_TAGS:
                     break
         if tag not in VOID_TAGS and len(self._stack) < MAX_DEPTH:
             self._stack.append((tag, a))
