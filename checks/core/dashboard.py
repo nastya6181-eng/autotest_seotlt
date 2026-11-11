@@ -7,7 +7,9 @@
 прогоны Actions. Без токена (локально) — только история, разделы задач и пайплайнов пустые.
 """
 import argparse
+import ast
 import datetime as dt
+import glob
 import json
 import os
 import statistics
@@ -164,8 +166,27 @@ def runs_metrics(runs, today=None, days=RUN_DAYS):
     return {"by_workflow": result, "recent": recent, "days": days}
 
 
+def rule_titles():
+    """Названия правил по-русски из RULES/PATTERNS проверок — без импорта модулей (в Metrics нет их зависимостей)."""
+    titles = {}
+    for path in glob.glob(os.path.join(ROOT_DIR, "checks", "*", "*.py")):
+        check = os.path.splitext(os.path.basename(path))[0]
+        with open(path, encoding="utf-8") as f:
+            tree = ast.parse(f.read())
+        for node in tree.body:
+            if not (isinstance(node, ast.Assign) and isinstance(node.value, ast.Dict)
+                    and any(getattr(t, "id", "") in {"RULES", "PATTERNS"} for t in node.targets)):
+                continue
+            for k, v in zip(node.value.keys, node.value.values):
+                if (isinstance(k, ast.Constant) and isinstance(v, ast.Tuple) and len(v.elts) > 1
+                        and isinstance(v.elts[1], ast.Constant)):
+                    titles[f"{check}.{k.value}"] = v.elts[1].value
+    return titles
+
+
 def quality_metrics(rows):
     """Динамика дефектов по сайтам (контент) и страницам (макет), правила последних прогонов."""
+    titles = rule_titles()
     series = defaultdict(list)
     for r in rows:
         name = r["site"] + (f" · {r['page']}" if r.get("page") else "")
@@ -185,7 +206,8 @@ def quality_metrics(rows):
                      "warnings": last["warnings"], "info": last["info"], "pages": last["pages"],
                      "run_url": last.get("run_url", "")},
             "heat": {"runs": [r["started_at"][:10] for r in recent],
-                     "rules": [{"rule": k, "counts": [r["by_rule"].get(k, 0) for r in recent]} for k in rules]},
+                     "rules": [{"rule": k, "title": titles.get(k, k), "counts": [r["by_rule"].get(k, 0) for r in recent]}
+                               for k in rules]},
         })
     return out
 
@@ -261,9 +283,10 @@ def report_md(data, dashboard_url=""):
         out += ["", "**Что чаще всего находят** — правила последнего прогона; число — сколько раз встретилось "
                 "по всем страницам (одна ошибка в шапке считается на каждой странице, поэтому больше числа замечаний выше):", ""]
         for s in q:
-            top = sorted(((rr["counts"][-1], rr["rule"]) for rr in s["heat"]["rules"] if rr["counts"][-1]), reverse=True)[:5]
+            top = sorted(((rr["counts"][-1], rr.get("title", rr["rule"])) for rr in s["heat"]["rules"] if rr["counts"][-1]),
+                         reverse=True)[:5]
             if top:
-                out.append(f"- {s['name']}: " + ", ".join(f"`{rule}` — {n}" for n, rule in top))
+                out.append(f"- **{s['name']}:** " + "; ".join(f"{title} — {n}" for n, title in top))
 
     if i:
         out += ["", "## Задачи", "", "| метка | открыто | закрыто |", "|---|---|---|"]

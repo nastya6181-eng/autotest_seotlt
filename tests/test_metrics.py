@@ -192,8 +192,14 @@ class QualityMetricsTest(unittest.TestCase):
         content = q[("content", "innotech")]
         self.assertEqual(content["errors"], [1, 2])
         self.assertEqual(content["defects"], [3, 4])
-        self.assertEqual(content["heat"]["rules"], [{"rule": "spelling", "counts": [1, 2]}])
+        self.assertEqual(content["heat"]["rules"], [{"rule": "spelling", "title": "spelling", "counts": [1, 2]}])
         self.assertIn(("design", "innotech · main"), q)
+
+    def test_rule_titles_in_russian(self):
+        titles = dashboard.rule_titles()
+        self.assertEqual(titles["links.broken_external"], "Битая ссылка на другой сайт")
+        self.assertEqual(titles["typography.repeated_word"], "Слово повторяется подряд")
+        self.assertIn("design.missing", titles)
 
 
 class SummaryTest(unittest.TestCase):
