@@ -7,7 +7,7 @@ import tempfile
 import unittest
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))  # корень репозитория
-from checks.core import dashboard, history  # noqa: E402
+from checks.core import collect, dashboard, history  # noqa: E402
 
 TODAY = dt.datetime(2026, 11, 11, 12, 0, tzinfo=dt.timezone.utc)
 
@@ -96,6 +96,23 @@ class HistoryTest(unittest.TestCase):
             history.append(col2, out, "content", "7")
             [r] = history.load(os.path.dirname(out))
             self.assertEqual(r["errors"], 0)
+
+
+class CollectTest(unittest.TestCase):
+    def test_single_artifact_moved_into_its_folder(self):
+        with tempfile.TemporaryDirectory() as col:
+            with open(os.path.join(col, "summary.json"), "w", encoding="utf-8") as f:
+                json.dump(summary("lazun", "lazun", "2026-11-11 10:00"), f)
+            os.makedirs(os.path.join(col, "logs"))
+            collect.normalize(col)
+            self.assertEqual(sorted(os.listdir(col)), ["report-lazun"])
+            self.assertEqual(len(history.append(col, os.path.join(col, "h.jsonl"), "content")), 1)
+
+    def test_several_artifacts_left_as_is(self):
+        with tempfile.TemporaryDirectory() as col:
+            write_collected(col, [summary("a", "a", "x"), summary("b", "b", "y")])
+            self.assertIsNone(collect.normalize(col))
+            self.assertEqual(sorted(os.listdir(col)), ["report-0", "report-1"])
 
 
 class IssuesMetricsTest(unittest.TestCase):

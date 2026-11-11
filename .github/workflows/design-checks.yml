@@ -140,6 +140,7 @@ jobs:
             d=${d%/}
             mv "$d" "collected/report-${d#collected/design-}"
           done
+          python checks/core/collect.py collected   # одна страница: архив распакован прямо в collected
       - name: Общая сводка
         run: python checks/core/build_index.py collected | sed 's/## Общие проверки сайтов/## Сверка вёрстки с макетами/' >> "$GITHUB_STEP_SUMMARY"
       - name: Результаты как тесты (вкладка Checks)
