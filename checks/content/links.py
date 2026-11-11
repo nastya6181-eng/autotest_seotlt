@@ -133,7 +133,7 @@ def where(link):
     if (op == "$=" and not raw) or re.search(r'[\\\n\r"]', raw):
         selector = link["path"]  # такой адрес в селектор не вставить без экранирования — ищем по пути
     else:
-        selector = re.sub(r"[^ >]+$", lambda m: f'{m.group(0)}[{attr}{op}"{raw}"]', link["path"])
+        selector = re.sub(r"[^ ]+$", lambda m: f'{m.group(0)}[{attr}{op}"{raw}"]', link["path"])
     return f"{link['area'] + ' · ' if link.get('area') else ''}`{selector}`"
 
 

@@ -64,7 +64,7 @@ def locate(stack):
         if area:
             break
     path = [node_token(t, a) for t, a in stack if t not in {"html", "body"}]
-    return area, " > ".join(path[-4:])
+    return area, " ".join(path[-4:])  # предок, а не прямой родитель: браузер достраивает tbody и закрывает теги
 
 
 @dataclass
