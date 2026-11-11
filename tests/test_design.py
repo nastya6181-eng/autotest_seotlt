@@ -29,6 +29,19 @@ def s(text, x, y, **kw):
     return {**base, **kw}
 
 
+class CollectorContractTest(unittest.TestCase):
+    def test_js_collector_returns_every_field_python_reads(self):
+        """Поля, которые сопоставление и сравнение читают у элемента сайта, есть в JS-сборщике.
+        Тесты ниже подставляют готовые словари, поэтому потерю поля в JS ловит только эта проверка."""
+        import re
+        block = design.COLLECT_JS[design.COLLECT_JS.index("out.push({"):]
+        block = block[:block.index("});")]
+        js_keys = set(re.findall(r"\b([a-z_]+)\s*:", block)) | {"text", "offscreen"}  # text, offscreen — краткая запись
+        python_reads = {"text", "x", "y", "lines", "font_family", "font_size", "font_weight", "letter_spacing_px",
+                        "line_height_px", "color", "opacity", "depth", "offscreen"}
+        self.assertEqual(python_reads - js_keys, set())
+
+
 class ExtractTest(unittest.TestCase):
     def test_extract(self):
         data = design.extract_svg(SVG)

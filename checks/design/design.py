@@ -173,6 +173,7 @@ COLLECT_JS = r"""
         while (n && n !== document.documentElement) { o *= +getComputedStyle(n).opacity; n = n.parentElement; }
         return o;
       })(),
+      depth: (() => { let d = 0, n = el; while ((n = n.parentElement)) d++; return d; })(),
     });
   }
   return out;
