@@ -144,7 +144,7 @@ jobs:
         run: python checks/core/build_index.py collected | sed 's/## Общие проверки сайтов/## Сверка вёрстки с макетами/' >> "$GITHUB_STEP_SUMMARY"
       - name: Результаты как тесты (вкладка Checks)
         if: hashFiles('collected/**/junit.xml') != ''
-        uses: mikepenz/action-junit-report@v5
+        uses: mikepenz/action-junit-report@v6
         with:
           report_paths: collected/**/junit.xml
           check_name: Сверка вёрстки с макетами
