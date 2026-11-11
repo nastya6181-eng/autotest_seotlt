@@ -24,7 +24,7 @@ CHECK_WORKFLOWS = {"Common checks", "Design checks"}
 WORK_LABELS = ["site-fix", "design", "coverage", "autotest", "enhancement", "dependencies"]
 SLA_DAYS = {"site-fix": 14}          # задача с этой меткой старше N дней — просрочена
 WEEKS = 12
-METRICS_LABEL = "metrics"            # задача с метриками сама в подсчёт задач не входит
+METRICS_LABEL = "metrics"            # старая задача с метриками (#70) в подсчёт задач не входит
 RUN_DAYS = 30
 
 
@@ -225,7 +225,7 @@ def trend(values):
 
 
 def report_md(data, dashboard_url=""):
-    """Метрики простым текстом и таблицами — для закреплённой задачи и сводки прогона."""
+    """Метрики простым текстом и таблицами — для METRICS.md и сводки прогона."""
     i, r, q = data.get("issues"), data.get("runs"), data.get("quality", [])
     out = ["# 📊 Метрики автотестов", "",
            f"Обновлено {data['generated_at']}. Обновляется само после каждого прогона проверок и при изменении задач."
