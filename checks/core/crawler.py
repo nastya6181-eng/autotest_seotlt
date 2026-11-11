@@ -25,6 +25,50 @@ SKIP_EXT = re.compile(
 )
 
 
+VOID_TAGS = {"area", "base", "br", "col", "embed", "hr", "img", "input", "link", "meta", "source", "track", "wbr"}
+AREAS = [("шапка", ("header",), ("header", "top-bar", "topbar")),
+         ("подвал", ("footer",), ("footer",)),
+         ("меню", ("nav",), ("menu", "nav")),
+         ("боковая колонка", ("aside",), ("sidebar", "aside")),
+         ("содержимое", ("main", "article"), ("content", "main"))]
+
+
+CSS_NAME = re.compile(r"-?[A-Za-z_][\w-]*")  # md:flex, w-1/2 без экранирования селектор ломают
+MAX_DEPTH = 256
+P_CLOSERS = {"div", "ul", "ol", "dl", "table", "section", "article", "aside", "header", "footer", "nav", "main",
+             "form", "h1", "h2", "h3", "h4", "h5", "h6", "blockquote", "pre", "hr", "figure", "address", "fieldset",
+             "details", "dialog", "menu", "center", "search", "hgroup", "figcaption", "summary"}
+INLINE_TAGS = {"a", "span", "b", "i", "em", "strong", "small", "u", "s", "sub", "sup", "mark", "label", "abbr", "font"}
+AUTO_CLOSE = {"li": {"ul", "ol"}, "p": {"div", "section", "article", "td"}, "tr": {"table", "tbody", "thead"},
+              "td": {"tr"}, "th": {"tr"}, "option": {"select"}, "dt": {"dl"}, "dd": {"dl"}}
+SIBLINGS = {"dt": {"dt", "dd"}, "dd": {"dt", "dd"}, "td": {"td", "th"}, "th": {"td", "th"}}
+GENERATED_ID = re.compile(r"^(bx_|comp_|ember|react-|yui_)|\d{3,}|[a-z][A-Z]{2}|[A-Z][a-z][A-Z]")
+
+
+def node_token(tag, a):
+    """Элемент так, как его ищут в DevTools: тег с id или первым классом. Сгенерированный id
+    (Битрикс, фреймворки) меняется от загрузки к загрузке — по нему не найти."""
+    if a.get("id") and CSS_NAME.fullmatch(a["id"]) and not GENERATED_ID.search(a["id"]):
+        return f"{tag}#{a['id']}"
+    cls = [c for c in (a.get("class") or "").split() if CSS_NAME.fullmatch(c)]
+    return f"{tag}.{cls[0]}" if cls else tag
+
+
+def locate(stack):
+    """(блок страницы, CSS-путь) для элемента по цепочке его предков."""
+    area = ""
+    for name, tags, words in AREAS:
+        for tag, a in stack:
+            names = f"{a.get('id') or ''} {a.get('class') or ''}".lower()
+            if tag in tags or any(w in names for w in words):
+                area = name
+                break
+        if area:
+            break
+    path = [node_token(t, a) for t, a in stack if t not in {"html", "body"}]
+    return area, " ".join(path[-4:])  # предок, а не прямой родитель: браузер достраивает tbody и закрывает теги
+
+
 @dataclass
 class Page:
     url: str
@@ -43,9 +87,33 @@ class PageParser(HTMLParser):
         self._skip = 0
         self._a = None
         self._in_title = False
+        self._stack = []
+
+    def _where(self, tag, a):
+        on_stack = bool(self._stack) and self._stack[-1] == (tag, a)
+        area, path = locate(self._stack if on_stack else self._stack + [(tag, a)])
+        return {"area": area, "path": path}
 
     def handle_starttag(self, tag, attrs):
         a = dict(attrs)
+        if tag in AUTO_CLOSE:  # <li> без </li>: следующий <li> закрывает предыдущий, как в браузере
+            for i in range(len(self._stack) - 1, -1, -1):
+                t = self._stack[i][0]
+                if t in AUTO_CLOSE[tag]:
+                    break
+                if t in SIBLINGS.get(tag, {tag}):
+                    del self._stack[i:]
+                    break
+        if tag in P_CLOSERS:  # блок внутри <p> браузер не вкладывает: абзац закрывается
+            for i in range(len(self._stack) - 1, -1, -1):
+                t = self._stack[i][0]
+                if t == "p":
+                    del self._stack[i:]
+                    break
+                if t not in INLINE_TAGS:
+                    break
+        if tag not in VOID_TAGS and len(self._stack) < MAX_DEPTH:
+            self._stack.append((tag, a))
         for key in ("id", "name"):
             if a.get(key):
                 self.ids.add(a[key])
@@ -56,11 +124,12 @@ class PageParser(HTMLParser):
             self.chunks.append("\n")
         if tag == "a" and "href" in a:
             self._a = {"tag": "a", "raw": a["href"] or "", "text": a.get("aria-label") or "",
-                       "blank": (a.get("target") or "").lower() == "_blank"}
+                       "blank": (a.get("target") or "").lower() == "_blank", **self._where(tag, a)}
             self.links.append(self._a)
         elif tag in SRC_TAGS and a.get(SRC_TAGS[tag]):
             if not (tag == "link" and (a.get("rel") or "") in {"preconnect", "dns-prefetch"}):
-                self.links.append({"tag": tag, "raw": a[SRC_TAGS[tag]], "text": a.get("alt") or ""})
+                self.links.append({"tag": tag, "raw": a[SRC_TAGS[tag]], "text": a.get("alt") or "",
+                                   **self._where(tag, a)})
         if tag == "meta" and (a.get("name") or a.get("property", "")).lower() in {
             "description", "og:title", "og:description"
         }:
@@ -89,6 +158,10 @@ class PageParser(HTMLParser):
             m["img_no_alt"].append(a["src"])
 
     def handle_endtag(self, tag):
+        for i in range(len(self._stack) - 1, -1, -1):
+            if self._stack[i][0] == tag:
+                del self._stack[i:]
+                break
         if tag == "title":
             self._in_title = False
         if tag in SKIP_TAGS and self._skip:
