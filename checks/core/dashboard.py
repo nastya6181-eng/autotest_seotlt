@@ -47,9 +47,9 @@ def gh(path, token):
         return json.loads(r.read().decode())
 
 
-def gh_all(path, token, key=None, limit=1000):
+def gh_all(path, token, key=None, limit=None):
     out, page = [], 1
-    while len(out) < limit:
+    while limit is None or len(out) < limit:
         sep = "&" if "?" in path else "?"
         data = gh(f"{path}{sep}per_page=100&page={page}", token)
         items = data[key] if key else data
@@ -68,7 +68,7 @@ def fetch_github(repo, token):
     for r in runs:  # почему упал прогон проверок: дефекты сайта или инфраструктура
         r["reason"] = None
         if r.get("name") in CHECK_WORKFLOWS and r.get("conclusion") == "failure":
-            jobs = gh(f"/repos/{repo}/actions/runs/{r['id']}/jobs?per_page=100", token)["jobs"]
+            jobs = gh_all(f"/repos/{repo}/actions/runs/{r['id']}/jobs", token, key="jobs")
             r["reason"] = failure_reason(jobs)
     return issues, milestones, runs
 
