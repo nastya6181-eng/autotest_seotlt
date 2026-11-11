@@ -76,6 +76,27 @@ class HistoryTest(unittest.TestCase):
             self.assertEqual((r["site"], r["run_id"], r["errors"], r["failed"]), ("innotech", "99", 10, True))
             self.assertEqual(r["by_rule"], {"spelling": 5})
 
+    def test_legacy_csv_survives_changed_rule_set(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            with open(os.path.join(tmp, "lazun.csv"), "w", encoding="utf-8") as f:
+                f.write("date,run,pages,pages_failed,urls,errors,warnings,info,failed,spelling,dash\n")
+                f.write('"2026-11-01","1",1,0,1,0,0,0,false,1,2,3\n')
+                f.write('"2026-11-02","2",1,0,1,0,0,0,false,4\n')
+            first, second = history.load(tmp)
+            self.assertEqual(first["by_rule"], {"spelling": 1, "dash": 2})
+            self.assertEqual(second["by_rule"], {"spelling": 4})
+
+    def test_rerun_of_same_run_keeps_latest_result(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            col1, col2 = os.path.join(tmp, "c1"), os.path.join(tmp, "c2")
+            out = os.path.join(tmp, "h", "runs.jsonl")
+            write_collected(col1, [summary("a", "a", "2026-11-10 10:00", errors=5)])
+            write_collected(col2, [summary("a", "a", "2026-11-10 11:00", errors=0)])
+            history.append(col1, out, "content", "7")
+            history.append(col2, out, "content", "7")
+            [r] = history.load(os.path.dirname(out))
+            self.assertEqual(r["errors"], 0)
+
 
 class IssuesMetricsTest(unittest.TestCase):
     def setUp(self):
@@ -100,6 +121,13 @@ class IssuesMetricsTest(unittest.TestCase):
         overdue = {o["number"]: o["overdue"] for o in self.m["oldest"]}
         self.assertEqual(overdue, {1: True, 3: False})
         self.assertEqual(self.m["overdue"], 1)
+
+    def test_overdue_counted_beyond_oldest_list(self):
+        old = [issue(n, "2026-01-01T10:00:00Z") for n in range(1, 14)]
+        late = issue(99, "2026-10-01T10:00:00Z", labels=["site-fix"])
+        m = dashboard.issues_metrics(old + [late], today=TODAY)
+        self.assertNotIn(99, [o["number"] for o in m["oldest"]])
+        self.assertEqual(m["overdue"], 1)
 
     def test_labels(self):
         self.assertEqual(self.m["labels"]["site-fix"], {"open": 2, "closed": 0})

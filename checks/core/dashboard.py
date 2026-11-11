@@ -24,6 +24,7 @@ CHECK_WORKFLOWS = {"Common checks", "Design checks"}
 WORK_LABELS = ["site-fix", "design", "coverage", "autotest", "enhancement", "dependencies"]
 SLA_DAYS = {"site-fix": 14}          # задача с этой меткой старше N дней — просрочена
 WEEKS = 12
+RUN_DAYS = 30
 
 
 def now():
@@ -62,7 +63,8 @@ def gh_all(path, token, key=None, limit=1000):
 def fetch_github(repo, token):
     issues = [i for i in gh_all(f"/repos/{repo}/issues?state=all", token) if "pull_request" not in i]
     milestones = gh_all(f"/repos/{repo}/milestones?state=all", token)
-    runs = gh_all(f"/repos/{repo}/actions/runs", token, key="workflow_runs", limit=200)
+    since = (now() - dt.timedelta(days=RUN_DAYS)).date().isoformat()
+    runs = gh_all(f"/repos/{repo}/actions/runs?created=%3E%3D{since}", token, key="workflow_runs")
     for r in runs:  # почему упал прогон проверок: дефекты сайта или инфраструктура
         r["reason"] = None
         if r.get("name") in CHECK_WORKFLOWS and r.get("conclusion") == "failure":
@@ -102,13 +104,13 @@ def issues_metrics(issues, today=None):
                 labels[name]["open" if i["state"] == "open" else "closed"] += 1
     close_days = [(parse(i["closed_at"]) - parse(i["created_at"])).total_seconds() / 86400
                   for i in issues if i.get("closed_at")]
-    oldest = []
-    for i in sorted((i for i in issues if i["state"] == "open"), key=lambda i: i["created_at"])[:12]:
+    open_issues = []
+    for i in sorted((i for i in issues if i["state"] == "open"), key=lambda i: i["created_at"]):
         names = [lb["name"] for lb in i.get("labels", [])]
         age = (today - parse(i["created_at"])).days
         overdue = any(age > d for lbl, d in SLA_DAYS.items() if lbl in names)
-        oldest.append({"number": i["number"], "title": i["title"], "url": i["html_url"], "age": age,
-                       "labels": names, "overdue": overdue})
+        open_issues.append({"number": i["number"], "title": i["title"], "url": i["html_url"], "age": age,
+                            "labels": names, "overdue": overdue})
     return {
         "weeks": [w.isoformat() for w in weeks],
         "opened": [opened[w] for w in weeks], "closed": [closed[w] for w in weeks], "open_at": open_at,
@@ -117,8 +119,8 @@ def issues_metrics(issues, today=None):
         "closed_7d": sum(1 for i in issues if i.get("closed_at") and (today - parse(i["closed_at"])).days < 7),
         "opened_7d": sum(1 for i in issues if (today - parse(i["created_at"])).days < 7),
         "median_close_days": round(statistics.median(close_days), 1) if close_days else None,
-        "overdue": sum(1 for o in oldest if o["overdue"]),
-        "oldest": oldest,
+        "overdue": sum(1 for o in open_issues if o["overdue"]),
+        "oldest": open_issues[:12],
     }
 
 
@@ -128,7 +130,7 @@ def workflow_name(run):
     return "Dependabot" if " in /" in name and "Update #" in name else name
 
 
-def runs_metrics(runs, today=None, days=30):
+def runs_metrics(runs, today=None, days=RUN_DAYS):
     today = today or now()
     since = today - dt.timedelta(days=days)
     out = defaultdict(lambda: {"success": 0, "defects": 0, "infra": 0, "other": 0, "durations": []})

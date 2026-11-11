@@ -59,13 +59,13 @@ def legacy_csv(path):
                 "urls_checked": int(row["urls"]), "duration_s": None, "failed": row["failed"] == "true",
                 "rules_failed": None, "rules_total": None,
                 "errors": int(row["errors"]), "warnings": int(row["warnings"]), "info": int(row["info"]),
-                "by_rule": {k: int(v) for k, v in row.items() if k not in fixed and v != ""},
+                "by_rule": {k: int(v) for k, v in row.items() if k and k not in fixed and isinstance(v, str) and v},
             })
     return out
 
 
 def load(history_dir):
-    """Все прогоны: runs.jsonl + старые CSV; повторы (тот же прогон и сайт) отбрасываются."""
+    """Все прогоны: runs.jsonl + старые CSV; у повторов (перезапуск того же прогона) остаётся последняя запись."""
     rows = []
     for path in sorted(glob.glob(os.path.join(history_dir, "*.csv"))):
         rows += legacy_csv(path)
@@ -73,13 +73,10 @@ def load(history_dir):
     if os.path.exists(jsonl):
         with open(jsonl, encoding="utf-8") as f:
             rows += [json.loads(line) for line in f if line.strip()]
-    seen, out = set(), []
+    latest = {}
     for r in rows:
-        key = (r["workflow"], r["site"], r.get("page"), r["run_id"] or r["started_at"])
-        if key not in seen:
-            seen.add(key)
-            out.append(r)
-    return sorted(out, key=lambda r: r["started_at"])
+        latest[(r["workflow"], r["site"], r.get("page"), r["run_id"] or r["started_at"])] = r
+    return sorted(latest.values(), key=lambda r: r["started_at"])
 
 
 def main():
