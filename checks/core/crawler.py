@@ -40,6 +40,7 @@ P_CLOSERS = {"div", "ul", "ol", "dl", "table", "section", "article", "aside", "h
 INLINE_TAGS = {"a", "span", "b", "i", "em", "strong", "small", "u", "s", "sub", "sup", "mark", "label", "abbr", "font"}
 AUTO_CLOSE = {"li": {"ul", "ol"}, "p": {"div", "section", "article", "td"}, "tr": {"table", "tbody", "thead"},
               "td": {"tr"}, "th": {"tr"}, "option": {"select"}, "dt": {"dl"}, "dd": {"dl"}}
+SIBLINGS = {"dt": {"dt", "dd"}, "dd": {"dt", "dd"}, "td": {"td", "th"}, "th": {"td", "th"}}
 GENERATED_ID = re.compile(r"^(bx_|comp_|ember|react-|yui_)|\d{3,}|[a-z][A-Z]{2}|[A-Z][a-z][A-Z]")
 
 
@@ -88,7 +89,8 @@ class PageParser(HTMLParser):
         self._stack = []
 
     def _where(self, tag, a):
-        area, path = locate(self._stack if tag not in VOID_TAGS else self._stack + [(tag, a)])
+        on_stack = bool(self._stack) and self._stack[-1] == (tag, a)
+        area, path = locate(self._stack if on_stack else self._stack + [(tag, a)])
         return {"area": area, "path": path}
 
     def handle_starttag(self, tag, attrs):
@@ -98,7 +100,7 @@ class PageParser(HTMLParser):
                 t = self._stack[i][0]
                 if t in AUTO_CLOSE[tag]:
                     break
-                if t == tag:
+                if t in SIBLINGS.get(tag, {tag}):
                     del self._stack[i:]
                     break
         if tag in P_CLOSERS:  # блок внутри <p> браузер не вкладывает: абзац закрывается

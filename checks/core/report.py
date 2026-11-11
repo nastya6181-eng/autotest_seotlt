@@ -176,8 +176,10 @@ def format_test_log(name, rules, findings, fail_on, base="", limit=100):
             located = re.fullmatch(r"(?:(.+?) · )?`(.+)`", f.context or "")
             if located:
                 area, selector = located.groups()
-                lines.append(f"       где:      {area + ', ' if area else ''}{scrub(selector, base)}")
-                lines.append("       найти:    F12 → Elements → Ctrl+F → вставить путь из строки «где»")
+                if area:
+                    lines.append(f"       где:      {area}")
+                lines.append(f"       путь:     {scrub(selector, base)}")
+                lines.append("       найти:    F12 → Elements → Ctrl+F → вставить строку «путь» целиком")
             elif f.context and f.context != f.fragment:
                 lines.append(f"       контекст: …{scrub(f.context, base)[:140]}…")
             found = find_hint(f, pages[0], base)
@@ -237,8 +239,8 @@ def link(url, base):
 
 
 HOW_TO_FIND = {
-    "links": "открыть страницу → F12 → вкладка Elements → Ctrl+F (⌘F) → вставить путь из колонки «где на странице», "
-             "браузер подсветит элемент.",
+    "links": "открыть страницу → F12 → вкладка Elements → Ctrl+F (⌘F) → вставить путь из колонки «где на странице» "
+             "(текст в рамке, без названия блока) — браузер подсветит элемент.",
     "typography": "открыть страницу → Ctrl+F (⌘F) → искать текст из колонки «что».",
     "spelling": "открыть страницу → Ctrl+F (⌘F) → искать слово из колонки «что».",
 }

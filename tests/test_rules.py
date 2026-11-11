@@ -104,6 +104,13 @@ class LinkLocationTest(unittest.TestCase):
         self.assertEqual(where(slash), "содержимое · `main div a`")
         self.assertEqual(where(long), 'содержимое · `main div a[href^="/' + 'x' * 79 + '"]`')
 
+    def test_siblings_and_depth_limit(self):
+        p = PageParser()
+        p.feed('<dl><dt>Термин<dd><a href="">x</a></dl>' + '<div>' * 300 + '<a href="">y</a>')
+        dd, deep = p.links
+        self.assertEqual(dd["path"], "dl dd a")
+        self.assertTrue(deep["path"].endswith("div a"))
+
     def test_old_crawl_without_location_falls_back_to_text(self):
         self.assertEqual(where({"tag": "a", "raw": "", "text": "Профиль"}), "Профиль")
 
