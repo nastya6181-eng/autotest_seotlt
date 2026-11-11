@@ -63,7 +63,7 @@ jobs:
 
       - name: Кэш словарей Hunspell
         id: dict
-        uses: actions/cache@v4
+        uses: actions/cache@v6
         with:
           path: checks/content/.cache/dict
           key: ${{ env.DICT_CACHE_KEY }}
@@ -122,7 +122,7 @@ jobs:
         run: python checks/core/list_sites.py --mask
 
       - name: Словари из кэша
-        uses: actions/cache/restore@v4
+        uses: actions/cache/restore@v6
         with:
           path: checks/content/.cache/dict
           key: ${{ env.DICT_CACHE_KEY }}
