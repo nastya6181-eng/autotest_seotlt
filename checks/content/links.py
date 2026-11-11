@@ -4,9 +4,10 @@ import ssl
 import time
 from collections import defaultdict
 from concurrent.futures import ThreadPoolExecutor
+from http.cookiejar import CookieJar
 from urllib.error import HTTPError, URLError
 from urllib.parse import quote, unquote, urldefrag, urljoin, urlparse
-from urllib.request import HTTPRedirectHandler, Request, build_opener
+from urllib.request import HTTPCookieProcessor, HTTPRedirectHandler, Request, build_opener
 
 from checks.core import throttle
 from checks.core.crawler import RETRY_STATUSES, SRC_TAGS, UA, retry_pause, same_site
@@ -22,7 +23,9 @@ RULES = {
     "missing_anchor": ("warning", "Якорь #id отсутствует на странице"),
     "redirect": ("info", "Ссылка ведёт через редирект, лучше поставить конечный адрес"),
     "external_same_tab": ("info", "Внешняя ссылка открывается в той же вкладке"),
+    "external_unchecked": ("info", "Чужой сайт не пустил проверку — открыть ссылку вручную"),
 }
+BOT_BLOCK = {401, 403, 429}  # чужой сайт закрыт от роботов: ссылка, скорее всего, жива
 EMAIL = re.compile(r"^[^@\s]+@[^@\s]+\.[A-Za-z]{2,}$")
 
 
@@ -34,11 +37,11 @@ class NoRedirect(HTTPRedirectHandler):
 OPENER = build_opener(NoRedirect)
 
 
-def request(url, method, timeout):
+def request(url, method, timeout, opener=None):
     req = Request(url, method=method, headers={"User-Agent": UA, "Accept": "*/*"})
     throttle.wait(url)
     try:
-        r = OPENER.open(req, timeout=timeout)
+        r = (opener or OPENER).open(req, timeout=timeout)
         return r.status, r.headers, r
     except HTTPError as e:
         return e.code, e.headers, None
@@ -47,12 +50,13 @@ def request(url, method, timeout):
 def check_url(url, timeout=15, max_redirects=10, retries=3):
     """(статус, итоговый URL, цепочка редиректов, ошибка)."""
     chain, current = [], url
+    opener = build_opener(NoRedirect, HTTPCookieProcessor(CookieJar()))  # без cookie часть сайтов гоняет по кругу
     for _ in range(max_redirects):
         try:
             for attempt in range(retries + 1):
-                status, headers, resp = request(current, "HEAD", timeout)
+                status, headers, resp = request(current, "HEAD", timeout, opener)
                 if status in {400, 403, 404, 405, 501} or status >= 500 or status == 429:
-                    status, headers, resp = request(current, "GET", timeout)
+                    status, headers, resp = request(current, "GET", timeout, opener)
                 if resp:
                     resp.close()
                 if status not in RETRY_STATUSES or attempt == retries:
@@ -170,7 +174,11 @@ def run(pages, cfg, overrides, env):
 
     for url, (status, final, chain, err) in results.items():
         internal = same_site(urlparse(url).netloc, host)
-        if err or status is None or status >= 400:
+        if not internal and (status in BOT_BLOCK or err == "слишком много редиректов"):
+            for page, text in uses[url]:
+                out.append(finding("external_unchecked", url, page, text,
+                                   message=f"{RULES['external_unchecked'][1]}: {err or status}"))
+        elif err or status is None or status >= 400:
             rule = "broken_internal" if internal else "broken_external"
             for page, text in uses[url]:
                 out.append(finding(rule, url, page, text,

@@ -111,8 +111,46 @@ class LinkLocationTest(unittest.TestCase):
         self.assertEqual(dd["path"], "dl dd a")
         self.assertTrue(deep["path"].endswith("div a"))
 
+    def test_share_menu_is_not_site_menu(self):
+        p = PageParser()
+        p.feed('<div class="product"><div class="share-menu"><a href="#">VK</a></div></div>'
+               '<div class="main-menu"><a href="#">Каталог</a></div>')
+        share, menu = p.links
+        self.assertEqual(share["area"], "")
+        self.assertEqual(menu["area"], "меню")
+
+    def test_microdata_link_is_not_a_link(self):
+        p = PageParser()
+        p.feed('<span itemprop="offers"><link itemprop="availability" href="http://schema.org/InStock"></span>'
+               '<link rel="stylesheet" href="/s.css">')
+        self.assertEqual([lk["raw"] for lk in p.links], ["/s.css"])
+
     def test_old_crawl_without_location_falls_back_to_text(self):
         self.assertEqual(where({"tag": "a", "raw": "", "text": "Профиль"}), "Профиль")
+
+
+class ExternalBotBlockTest(unittest.TestCase):
+    def run_links(self, results):
+        from unittest import mock
+
+        from checks.content import links
+        from checks.core.crawler import Page
+        page = Page("https://site.ru/", "", [{"tag": "a", "raw": u, "text": u, "blank": True} for u in results])
+        env = {"start_url": "https://site.ru/", "failed_pages": [], "stats": {}}
+        with mock.patch.object(links, "check_url", lambda url: results[url]):
+            return {f.fragment: f.rule_id for f in links.run([page], {}, {}, env)}
+
+    def test_bot_block_is_unchecked_not_broken(self):
+        found = self.run_links({
+            "https://ozon.ru/s/": (None, "https://ozon.ru/s/", [307] * 10, "слишком много редиректов"),
+            "https://vk.com/x": (403, "https://vk.com/x", [], ""),
+            "https://gone.ru/": (404, "https://gone.ru/", [], ""),
+            "https://site.ru/secret/": (403, "https://site.ru/secret/", [], ""),
+        })
+        self.assertEqual(found["https://ozon.ru/s/"], "links.external_unchecked")
+        self.assertEqual(found["https://vk.com/x"], "links.external_unchecked")
+        self.assertEqual(found["https://gone.ru/"], "links.broken_external")
+        self.assertEqual(found["https://site.ru/secret/"], "links.broken_internal")
 
 
 class LinksTest(unittest.TestCase):

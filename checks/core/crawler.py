@@ -45,6 +45,9 @@ SIBLINGS = {"dt": {"dt", "dd"}, "dd": {"dt", "dd"}, "td": {"td", "th"}, "th": {"
 GENERATED_ID = re.compile(r"^(bx_|comp_|ember|react-|yui_)|\d{3,}|[a-z][A-Z]{2}|[A-Z][a-z][A-Z]")
 
 
+NOT_AREA = ("-share-", "-social-", "-context-", "-dropdown-")  # share-menu — кнопка «поделиться», а не меню сайта
+
+
 def node_token(tag, a):
     """Элемент так, как его ищут в DevTools: тег с id или первым классом. Сгенерированный id
     (Битрикс, фреймворки) меняется от загрузки к загрузке — по нему не найти."""
@@ -59,8 +62,9 @@ def locate(stack):
     area = ""
     for name, tags, words in AREAS:
         for tag, a in stack:
-            names = f"{a.get('id') or ''} {a.get('class') or ''}".lower()
-            if tag in tags or any(w in names for w in words):
+            tokens = [f"-{t.replace('_', '-')}-" for t in f"{a.get('id') or ''} {a.get('class') or ''}".lower().split()]
+            named = any(f"-{w}-" in t and not t.startswith(NOT_AREA) for t in tokens for w in words)
+            if tag in tags or named:
                 area = name
                 break
         if area:
@@ -127,7 +131,8 @@ class PageParser(HTMLParser):
                        "blank": (a.get("target") or "").lower() == "_blank", **self._where(tag, a)}
             self.links.append(self._a)
         elif tag in SRC_TAGS and a.get(SRC_TAGS[tag]):
-            if not (tag == "link" and (a.get("rel") or "") in {"preconnect", "dns-prefetch"}):
+            service = tag == "link" and ((a.get("rel") or "") in {"preconnect", "dns-prefetch"} or "itemprop" in a)
+            if not service:  # <link itemprop href="http://schema.org/InStock"> — разметка для поисковиков, не ссылка
                 self.links.append({"tag": tag, "raw": a[SRC_TAGS[tag]], "text": a.get("alt") or "",
                                    **self._where(tag, a)})
         if tag == "meta" and (a.get("name") or a.get("property", "")).lower() in {
