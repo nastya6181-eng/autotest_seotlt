@@ -126,8 +126,7 @@ def where(link):
     attr = "href" if link["tag"] == "a" else SRC_TAGS.get(link["tag"], "src")
     raw, op = link["raw"], "="
     if re.match(r"(?i)^https?://", raw):  # без домена: адрес сайта в публичный отчёт не попадает
-        u = urlparse(raw)
-        raw, op = u.path + (f"?{u.query}" if u.query else "") + (f"#{u.fragment}" if u.fragment else ""), "$="
+        raw, op = re.sub(r"(?i)^https?://[^/?#]*", "", raw), "$="
     if len(raw) > 80:
         raw, op = (raw[-80:], "$=") if op == "$=" else (raw[:80], "^=")
     if (op == "$=" and not raw) or re.search(r'[\\\n\r"]', raw):

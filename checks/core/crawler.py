@@ -36,7 +36,8 @@ AREAS = [("шапка", ("header",), ("header", "top-bar", "topbar")),
 CSS_NAME = re.compile(r"-?[A-Za-z_][\w-]*")  # md:flex, w-1/2 без экранирования селектор ломают
 MAX_DEPTH = 256
 P_CLOSERS = {"div", "ul", "ol", "dl", "table", "section", "article", "aside", "header", "footer", "nav", "main",
-             "form", "h1", "h2", "h3", "h4", "h5", "h6", "blockquote", "pre", "hr", "figure", "address", "fieldset"}
+             "form", "h1", "h2", "h3", "h4", "h5", "h6", "blockquote", "pre", "hr", "figure", "address", "fieldset",
+             "details", "dialog", "menu", "center", "search", "hgroup", "figcaption", "summary"}
 INLINE_TAGS = {"a", "span", "b", "i", "em", "strong", "small", "u", "s", "sub", "sup", "mark", "label", "abbr", "font"}
 AUTO_CLOSE = {"li": {"ul", "ol"}, "p": {"div", "section", "article", "td"}, "tr": {"table", "tbody", "thead"},
               "td": {"tr"}, "th": {"tr"}, "option": {"select"}, "dt": {"dl"}, "dd": {"dl"}}
