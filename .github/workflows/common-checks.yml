@@ -200,7 +200,7 @@ jobs:
         run: python checks/core/list_sites.py --mask
 
       - name: Забрать результаты всех чанков
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@v8
         with:
           pattern: report-*
           path: collected
