@@ -1,0 +1,94 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "sites/<ключ>/integrations/integrations.yml — интеграции",
+  "type": "object",
+  "additionalProperties": false,
+  "properties": {
+    "maps": {
+      "type": "object",
+      "properties": {
+        "provider": {
+          "enum": [
+            "yandex",
+            "google"
+          ]
+        },
+        "pages": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "pattern": "^/(?!/)[^#\\s]*$"
+          }
+        }
+      }
+    },
+    "analytics": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": [
+          "provider"
+        ],
+        "properties": {
+          "provider": {
+            "enum": [
+              "yandex_metrika",
+              "google_analytics"
+            ]
+          },
+          "counter": {
+            "type": [
+              "integer",
+              "string"
+            ]
+          },
+          "all_pages": {
+            "type": "boolean"
+          },
+          "goals": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          }
+        }
+      }
+    },
+    "forms_delivery": {
+      "type": "array"
+    },
+    "mail_domain": {
+      "type": "string",
+      "pattern": "^[a-z0-9.-]+\\.[a-z]{2,}$"
+    },
+    "dkim_selectors": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "social": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": [
+          "name",
+          "url"
+        ],
+        "properties": {
+          "name": {
+            "type": "string"
+          },
+          "url": {
+            "type": "string",
+            "pattern": "^https://"
+          }
+        }
+      }
+    },
+    "domain_expiry_days": {
+      "type": "integer",
+      "minimum": 1
+    }
+  }
+}

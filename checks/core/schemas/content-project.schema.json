@@ -1,0 +1,99 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "sites/<ключ>/content/project.yml — настройки контента и SEO",
+  "type": "object",
+  "additionalProperties": false,
+  "properties": {
+    "max_pages": {
+      "type": "integer",
+      "minimum": 1
+    },
+    "delay": {
+      "type": "number",
+      "minimum": 0
+    },
+    "exclude": {
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "ignore_robots": {
+      "type": "boolean"
+    },
+    "max_rps": {
+      "type": [
+        "number",
+        "null"
+      ],
+      "exclusiveMinimum": 0
+    },
+    "cooldown": {
+      "type": "number",
+      "minimum": 0
+    },
+    "fail_on": {
+      "type": "array",
+      "items": {
+        "enum": [
+          "error",
+          "warning",
+          "info"
+        ]
+      }
+    },
+    "checks": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "tech": {
+          "type": [
+            "object",
+            "null"
+          ]
+        },
+        "seo": {
+          "type": [
+            "object",
+            "null"
+          ]
+        },
+        "links": {
+          "type": [
+            "object",
+            "null"
+          ]
+        },
+        "spelling": {
+          "type": [
+            "object",
+            "null"
+          ]
+        },
+        "typography": {
+          "type": [
+            "object",
+            "null"
+          ]
+        }
+      }
+    },
+    "severity": {
+      "type": [
+        "object",
+        "null"
+      ],
+      "propertyNames": {
+        "pattern": "^(tech|seo|links|spelling|typography)\\.[a-z_]+$"
+      },
+      "additionalProperties": {
+        "enum": [
+          "error",
+          "warning",
+          "info",
+          "off"
+        ]
+      }
+    }
+  }
+}

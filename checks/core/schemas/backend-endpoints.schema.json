@@ -1,0 +1,126 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "sites/<ключ>/backend/endpoints.yml — бэк",
+  "type": "object",
+  "additionalProperties": false,
+  "properties": {
+    "ttfb_ms": {
+      "type": "integer",
+      "minimum": 1
+    },
+    "pages": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": [
+          "path",
+          "status"
+        ],
+        "additionalProperties": false,
+        "properties": {
+          "path": {
+            "type": "string",
+            "pattern": "^/(?!/)[^#\\s]*$"
+          },
+          "status": {
+            "type": "integer",
+            "minimum": 100,
+            "maximum": 599
+          },
+          "location": {
+            "type": "string",
+            "pattern": "^/(?!/)[^#\\s]*$"
+          },
+          "ttfb_ms": {
+            "type": "integer",
+            "minimum": 1
+          }
+        }
+      }
+    },
+    "ajax": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": [
+          "path"
+        ],
+        "properties": {
+          "path": {
+            "type": "string",
+            "pattern": "^/(?!/)[^#\\s]*$"
+          },
+          "method": {
+            "enum": [
+              "GET",
+              "POST"
+            ]
+          },
+          "format": {
+            "enum": [
+              "json",
+              "html",
+              "text"
+            ]
+          },
+          "keys": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "skip": {
+            "type": "boolean"
+          }
+        }
+      }
+    },
+    "content": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": [
+          "section",
+          "item_must_have"
+        ],
+        "properties": {
+          "section": {
+            "type": "string",
+            "pattern": "^/(?!/)[^#\\s]*$"
+          },
+          "item_must_have": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          }
+        }
+      }
+    },
+    "forms": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": [
+          "name"
+        ],
+        "properties": {
+          "name": {
+            "type": "string",
+            "pattern": "^[a-z0-9][a-z0-9-]*$"
+          },
+          "page": {
+            "type": "string",
+            "pattern": "^/(?!/)[^#\\s]*$"
+          },
+          "staging_only": {
+            "type": "boolean"
+          }
+        }
+      }
+    },
+    "security": {
+      "type": "boolean"
+    }
+  }
+}

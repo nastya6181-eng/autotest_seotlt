@@ -1,0 +1,50 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "sites/<ключ>/design/pages.yml — страницы с макетами",
+  "type": "array",
+  "items": {
+    "type": "object",
+    "additionalProperties": false,
+    "required": [
+      "page",
+      "design"
+    ],
+    "properties": {
+      "name": {
+        "type": "string",
+        "pattern": "^[a-z0-9][a-z0-9-]*$"
+      },
+      "page": {
+        "type": "string",
+        "pattern": "^/(?!/)[^#\\s]*$"
+      },
+      "width": {
+        "type": "integer",
+        "minimum": 200,
+        "maximum": 4000
+      },
+      "design": {
+        "type": "string",
+        "pattern": "\\.json$"
+      },
+      "source": {
+        "type": "string"
+      },
+      "dynamic": {
+        "type": "array",
+        "items": {
+          "type": "array",
+          "items": {
+            "type": "number"
+          },
+          "minItems": 2,
+          "maxItems": 4
+        }
+      },
+      "tolerance": {
+        "type": "number",
+        "minimum": 0
+      }
+    }
+  }
+}

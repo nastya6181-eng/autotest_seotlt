@@ -1,0 +1,14 @@
+# Правила для YAML: пайплайны (.github/) и настройки сайтов (sites/). Запуск: yamllint .
+extends: default
+ignore: |
+  reports/
+  venv/
+  .venv/
+rules:
+  line-length: {max: 160, level: warning}     # длинные строки — в основном shell-команды и комментарии
+  document-start: disable                    # без «---» в начале файла
+  truthy: {allowed-values: ["true", "false"], check-keys: false}   # «on:» в workflow — ключ, а не булево
+  comments: {min-spaces-from-content: 1}
+  comments-indentation: disable              # комментарии-пояснения внутри списков
+  braces: {max-spaces-inside: 1}             # { path: /, status: 200 }
+  brackets: {max-spaces-inside: 1}

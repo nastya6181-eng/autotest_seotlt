@@ -58,7 +58,8 @@ jobs:
         run: |
           python checks/core/list_sites.py --mask
           pages=$(python checks/core/list_sites.py --design-pages)
-          [ "$pages" != "[]" ] || { echo "::error::Нет страниц: нужен секрет SITE_<КЛЮЧ> и sites/<ключ>/design/pages.yml (или нет страницы «$DESIGN_PAGE»)"; exit 1; }
+          msg="Нет страниц: нужен секрет SITE_<КЛЮЧ> и sites/<ключ>/design/pages.yml (или нет страницы «$DESIGN_PAGE»)"
+          [ "$pages" != "[]" ] || { echo "::error::$msg"; exit 1; }
           echo "$pages" | jq -r '"Страниц: \(length) — " + (map("\(.key) · \(.page)") | join(", "))'
           echo "sites=$pages" >> "$GITHUB_OUTPUT"
 

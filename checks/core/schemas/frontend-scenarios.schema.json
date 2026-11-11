@@ -1,0 +1,86 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "sites/<ключ>/frontend/scenarios.yml — фронт",
+  "type": "object",
+  "additionalProperties": false,
+  "properties": {
+    "widths": {
+      "type": "array",
+      "items": {
+        "type": "integer",
+        "minimum": 200,
+        "maximum": 4000
+      }
+    },
+    "pages": {
+      "type": "array",
+      "items": {
+        "type": "string",
+        "pattern": "^/(?!/)[^#\\s]*$"
+      }
+    },
+    "ignore": {
+      "type": "string"
+    },
+    "ignore_selectors": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "scenarios": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": [
+          "name",
+          "page",
+          "steps"
+        ],
+        "properties": {
+          "name": {
+            "type": "string",
+            "pattern": "^[a-z0-9][a-z0-9-]*$"
+          },
+          "page": {
+            "type": "string",
+            "pattern": "^/(?!/)[^#\\s]*$"
+          },
+          "width": {
+            "type": "integer"
+          },
+          "steps": {
+            "type": "array",
+            "minItems": 1
+          }
+        }
+      }
+    },
+    "forms": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": [
+          "name",
+          "page"
+        ],
+        "properties": {
+          "name": {
+            "type": "string",
+            "pattern": "^[a-z0-9][a-z0-9-]*$"
+          },
+          "page": {
+            "type": "string",
+            "pattern": "^/(?!/)[^#\\s]*$"
+          },
+          "required": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          }
+        }
+      }
+    }
+  }
+}

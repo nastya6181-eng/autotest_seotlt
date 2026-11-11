@@ -20,7 +20,6 @@ import sys
 import time
 from urllib.parse import urljoin
 
-
 ROOT_DIR = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 sys.path.insert(0, ROOT_DIR)  # импорты от корня репозитория: checks.core, checks.content, checks.design
 from checks.core import report, sites  # noqa: E402
