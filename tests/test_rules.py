@@ -113,7 +113,7 @@ class LinkLocationTest(unittest.TestCase):
 
     def test_share_menu_is_not_site_menu(self):
         p = PageParser()
-        p.feed('<div class="product"><div class="share-menu"><a href="#">VK</a></div></div>'
+        p.feed('<div class="product"><div class="product-share-menu menu"><a href="#">VK</a></div></div>'
                '<div class="main-menu"><a href="#">Каталог</a></div>')
         share, menu = p.links
         self.assertEqual(share["area"], "")

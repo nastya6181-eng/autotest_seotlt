@@ -63,7 +63,8 @@ def locate(stack):
     for name, tags, words in AREAS:
         for tag, a in stack:
             tokens = [f"-{t.replace('_', '-')}-" for t in f"{a.get('id') or ''} {a.get('class') or ''}".lower().split()]
-            named = any(f"-{w}-" in t and not t.startswith(NOT_AREA) for t in tokens for w in words)
+            widget = any(x in t for t in tokens for x in NOT_AREA)
+            named = not widget and any(f"-{w}-" in t for t in tokens for w in words)
             if tag in tags or named:
                 area = name
                 break
