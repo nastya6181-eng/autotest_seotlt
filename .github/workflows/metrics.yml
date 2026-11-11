@@ -1,7 +1,7 @@
 name: Metrics
 
-# Дашборд: качество сайтов, задачи, пайплайны — https://<владелец>.github.io/<репозиторий>/
-# Пересобирается после каждого прогона проверок, при изменении задач и вручную.
+# Метрики: закреплённая задача «📊 Метрики» во вкладке Issues и графики на GitHub Pages.
+# Пересобираются после каждого прогона проверок, при изменении задач и вручную.
 on:
   workflow_dispatch:
   workflow_run:
@@ -26,7 +26,7 @@ jobs:
     runs-on: ubuntu-latest
     permissions:
       contents: read
-      issues: read
+      issues: write       # закреплённая задача с метриками
       actions: read
     outputs:
       pages: ${{ steps.pages.outputs.enabled }}
@@ -52,8 +52,17 @@ jobs:
           GITHUB_TOKEN: ${{ github.token }}
         run: python checks/core/dashboard.py --history m/history --out site
 
-      - name: Ключевые цифры в сводку
-        run: python checks/core/dashboard.py --summary site/data.json >> "$GITHUB_STEP_SUMMARY"
+      - name: Метрики текстом
+        env:
+          DASHBOARD_URL: https://${{ github.repository_owner }}.github.io/${{ github.event.repository.name }}/
+        run: |
+          python checks/core/dashboard.py --summary site/data.json --dashboard-url "$DASHBOARD_URL" > metrics.md
+          cat metrics.md >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Задача «📊 Метрики» во вкладке Issues
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: bash checks/core/publish_metrics_issue.sh metrics.md
 
       - name: Дашборд архивом (если Pages не включены)
         uses: actions/upload-artifact@v7
