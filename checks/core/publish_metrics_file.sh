@@ -7,7 +7,7 @@ git config user.name "github-actions[bot]"
 git config user.email "41898283+github-actions[bot]@users.noreply.github.com"
 for attempt in 1 2 3 4 5; do
   rm -rf mp && git worktree prune
-  if git ls-remote --exit-code origin metrics >/dev/null; then
+  if git ls-remote --exit-code --heads origin metrics >/dev/null; then
     git fetch -q --depth=1 origin metrics && git worktree add -q mp origin/metrics && git -C mp checkout -q -B metrics
   else
     git worktree add -q --orphan -b metrics mp
