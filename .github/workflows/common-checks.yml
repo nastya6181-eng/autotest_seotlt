@@ -174,7 +174,8 @@ jobs:
           {
             cat "$OUT/summary.md" 2>/dev/null || echo "### ❌ ${{ matrix.site.key }}: отчёта нет — см. шаги «Обход сайта» и «Тест: …»"
             echo
-            echo "Лог каждого теста — шаги «Тест: …» этого задания. Все замечания одним файлом: [findings.csv в артефакте report-${{ matrix.site.key }}](${ARTIFACT_URL})."
+            echo "Лог каждого теста — шаги «Тест: …» этого задания."
+            echo "Все замечания одним файлом: [findings.csv в артефакте report-${{ matrix.site.key }}](${ARTIFACT_URL})."
           } >> "$GITHUB_STEP_SUMMARY"
 
   # ───────────────────────────── этап 3: сборщик логов ─────────────────────────────
@@ -240,7 +241,9 @@ jobs:
             f="m/history/$(jq -r .project_key "$s").csv"
             [ -f "$f" ] || echo "date,run,pages,pages_failed,urls,errors,warnings,info,failed,$(jq -r '.by_rule|keys_unsorted|join(",")' "$s")" > "$f"
             jq -r --arg run "$GITHUB_RUN_ID" \
-              '[.started_at,$run,.pages,.pages_failed,(.urls_checked//0),(.findings_unique.error//0),(.findings_unique.warning//0),(.findings_unique.info//0),.failed] + [.by_rule[]] | @csv' \
+              '[.started_at, $run, .pages, .pages_failed, (.urls_checked//0),
+                (.findings_unique.error//0), (.findings_unique.warning//0), (.findings_unique.info//0), .failed]
+                + [.by_rule[]] | @csv' \
               "$s" >> "$f"
           done
           cd m && git add history && git commit -qm "metrics: run $GITHUB_RUN_ID" && git push -q origin metrics || echo "нечего записывать"

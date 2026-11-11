@@ -168,7 +168,12 @@ COLLECT_JS = r"""
       line_height_px: s.lineHeight === 'normal' ? null : parseFloat(s.lineHeight),
       color: s.color, text_transform: s.textTransform,
       // итоговая прозрачность: opacity элемента и всех предков — полупрозрачность бывает и так, не только rgba
-      opacity: (() => { let o = 1, n = el; while (n && n !== document.documentElement) { o *= +getComputedStyle(n).opacity; n = n.parentElement; } return o; })(), depth: (() => { let d = 0, n = el; while (n = n.parentElement) d++; return d; })(),
+      opacity: (() => {
+        let o = 1, n = el;
+        while (n && n !== document.documentElement) { o *= +getComputedStyle(n).opacity; n = n.parentElement; }
+        return o;
+      })(),
+      depth: (() => { let d = 0, n = el; while ((n = n.parentElement)) d++; return d; })(),
     });
   }
   return out;

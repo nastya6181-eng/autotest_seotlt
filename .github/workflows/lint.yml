@@ -1,0 +1,39 @@
+# Линтеры на каждом PR — до мержа. Защита ветки main (Settings → Branches) с обязательными
+# проверками «lint» и «selftest» не даст смержить PR с красными линтерами или тестами.
+name: Lint
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: lint-${{ github.ref }}
+  cancel-in-progress: true
+
+defaults:
+  run:
+    shell: bash
+
+jobs:
+  lint:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Установить линтеры
+        run: pip install ruff==0.8.4 yamllint==1.35.1
+      - name: "Python: ruff"
+        run: ruff check --output-format=github .
+      - name: "YAML: yamllint"
+        run: yamllint -f github -s .
+      - name: "Пайплайны: actionlint"
+        uses: docker://rhysd/actionlint:1.7.7
+        with:
+          args: -color

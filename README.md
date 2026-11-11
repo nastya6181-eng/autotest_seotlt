@@ -292,6 +292,34 @@ infra ──► tests (site-a) ─┐
 
 Отдельный пайплайн **Design checks**, всё описание — в [checks/design/README.md](checks/design/README.md).
 
+## Правила кода и проверки до мержа
+
+На каждом PR сами запускаются два пайплайна. Пока они не зелёные, мержить нельзя:
+
+| Пайплайн | Что проверяет |
+|---|---|
+| **Lint** | Python — `ruff` (стиль, ошибки, порядок импортов), YAML — `yamllint`, пайплайны — `actionlint` (ошибки в `${{ }}` и ключах до запуска) |
+| **Self-test** | тесты кода в `tests/` и настройки всех сайтов из `sites/` по схемам `checks/core/schemas/`: опечатка в `pages.yml` или `project.yml` видна сразу |
+
+Правила заданы в `pyproject.toml` (ruff) и `.yamllint.yml`.
+
+**Локально, до пуша:**
+```bash
+pip install ruff==0.8.4 yamllint==1.35.1
+ruff check .            # исправить автоматически: ruff check . --fix
+yamllint -s .
+python -m unittest discover tests
+```
+Или один раз `pip install pre-commit && pre-commit install`, и то же самое будет запускаться перед каждым коммитом.
+
+**Защита ветки `main`** включается владельцем репозитория: Settings → Branches → Add branch ruleset (или Add rule) → ветка `main`:
+- Require a pull request before merging;
+- Require status checks to pass → добавить `lint` и `selftest`.
+
+Ещё:
+- **Шаблон PR** (`.github/pull_request_template.md`) — чек-лист, который открывается при создании PR.
+- **Dependabot** (`.github/dependabot.yml`) раз в неделю присылает PR с обновлениями GitHub Actions и пакетов Python, с меткой `dependencies`. Мержить после зелёных Lint и Self-test.
+
 ## Дальше
 
 - Сравнение с прошлым прогоном: показывать только новые замечания, а не весь список.

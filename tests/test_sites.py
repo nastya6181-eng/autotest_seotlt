@@ -63,7 +63,8 @@ class SitesTest(unittest.TestCase):
             sites.select("")
 
     def test_list_sites_reads_only_site_secrets(self):
-        import json, subprocess
+        import json
+        import subprocess
         env = {k: v for k, v in os.environ.items() if not k.startswith("SITE")}
         env["SECRETS_JSON"] = json.dumps({"SITE_A": "https://a.ru/ max_pages=5", "github_token": "x",
                                           "OTHER": "https://leak.ru/"})

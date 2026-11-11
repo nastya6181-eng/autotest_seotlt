@@ -6,8 +6,8 @@ import unittest
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))  # корень репозитория
 os.environ.pop("REPORT_FULL_URLS", None)  # тесты режима по умолчанию; полные адреса — в своём тесте
 from checks.content import seo  # noqa: E402
-from checks.core.crawler import Page, PageParser  # noqa: E402
 from checks.content.tech import robots_blocks_all  # noqa: E402
+from checks.core.crawler import Page, PageParser  # noqa: E402
 
 HTML = """<html lang="ru"><head><title>Главная — Компания</title>
 <meta name="description" content="Описание"><meta name="robots" content="noindex, follow">

@@ -4,15 +4,16 @@ import sys
 import unittest
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))  # корень репозитория
-from checks.design import design  # noqa: E402
 from checks.core.findings import make  # noqa: E402
+from checks.design import design  # noqa: E402
 
 SVG = """<svg width="1600" height="900" viewBox="0 0 1600 900" fill="none" xmlns="http://www.w3.org/2000/svg">
 <text fill="white" font-family="Montserrat" font-size="48" font-weight="600" letter-spacing="0em">
 <tspan x="144" y="100">&#x41d;&#x41e;&#x412;&#x41e;&#x421;&#x422;&#x418;</tspan></text>
 <text fill="#444C49" font-family="Montserrat" font-size="16" font-weight="500" letter-spacing="0.01em">
-<tspan x="144" y="200">&#x43d;&#x430;&#x443;&#x447;&#x43d;&#x43e;-</tspan><tspan x="144" y="224">&#x438;&#x441;&#x441;&#x43b;&#x435;&#x434;&#x43e;&#x432;&#x430;&#x442;&#x435;&#x43b;&#x44c;&#x441;&#x43a;&#x438;&#x445;</tspan></text>
-</svg>"""
+<tspan x="144" y="200">&#x43d;&#x430;&#x443;&#x447;&#x43d;&#x43e;-</tspan>
+<tspan x="144" y="224">&#x438;&#x441;&#x441;&#x43b;&#x435;&#x434;&#x43e;&#x432;&#x430;&#x442;&#x435;&#x43b;&#x44c;&#x441;&#x43a;&#x438;&#x445;</tspan></text>
+</svg>"""  # noqa: E501 — образец экспорта Figma, строку не разбить без смены текста
 
 
 def d(text, x, y, **kw):
@@ -26,6 +27,19 @@ def s(text, x, y, **kw):
             "font_weight": 500, "letter_spacing_px": 0, "line_height_px": None, "color": "rgb(255, 255, 255)",
             "depth": 5, "offscreen": False}
     return {**base, **kw}
+
+
+class CollectorContractTest(unittest.TestCase):
+    def test_js_collector_returns_every_field_python_reads(self):
+        """Поля, которые сопоставление и сравнение читают у элемента сайта, есть в JS-сборщике.
+        Тесты ниже подставляют готовые словари, поэтому потерю поля в JS ловит только эта проверка."""
+        import re
+        block = design.COLLECT_JS[design.COLLECT_JS.index("out.push({"):]
+        block = block[:block.index("});")]
+        js_keys = set(re.findall(r"\b([a-z_]+)\s*:", block)) | {"text", "offscreen"}  # text, offscreen — краткая запись
+        python_reads = {"text", "x", "y", "lines", "font_family", "font_size", "font_weight", "letter_spacing_px",
+                        "line_height_px", "color", "opacity", "depth", "offscreen"}
+        self.assertEqual(python_reads - js_keys, set())
 
 
 class ExtractTest(unittest.TestCase):

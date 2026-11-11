@@ -6,8 +6,8 @@ import time
 import uuid
 from urllib.parse import urljoin, urlparse
 
-from checks.core.findings import make
 from checks.content.links import request
+from checks.core.findings import make
 
 NAME = "tech"
 RULES = {

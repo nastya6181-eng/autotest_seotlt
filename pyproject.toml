@@ -1,0 +1,12 @@
+# Правила кода. Запуск: ruff check . (исправить автоматически: ruff check . --fix)
+[tool.ruff]
+line-length = 140          # длинные строки здесь — в основном тексты подсказок и JS для браузера
+target-version = "py39"
+
+[tool.ruff.lint]
+# E/W — стиль PEP 8, F — ошибки (неиспользуемое, неопределённое), B — опасные конструкции,
+# I — порядок импортов, UP — устаревший синтаксис
+select = ["E", "F", "W", "B", "I", "UP"]
+
+[tool.ruff.lint.isort]
+known-first-party = ["checks"]

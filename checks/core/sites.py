@@ -23,8 +23,9 @@ OPTIONS = {"max_pages": int, "delay": float, "max_rps": float, "cooldown": float
            "workers": int}
 
 
-def load_dotenv(path=os.path.join(ROOT, ".env")):
-    """Значения из .env не перебивают уже заданные в окружении."""
+def load_dotenv(path=None):
+    """Значения из .env не перебивают уже заданные в окружении. По умолчанию — .env в корне репозитория."""
+    path = path or os.path.join(ROOT, ".env")
     if not os.path.exists(path):
         return
     with open(path, encoding="utf-8-sig") as f:
@@ -84,8 +85,8 @@ def site_vars(env=None):
 
 
 def parse_sites(raw, extra_lines=()):
-    lines = [l.split("#", 1)[0].strip() for l in (raw or "").splitlines()] + list(extra_lines)
-    sites = [parse_line(l) for l in lines if l]
+    lines = [line.split("#", 1)[0].strip() for line in (raw or "").splitlines()] + list(extra_lines)
+    sites = [parse_line(line) for line in lines if line]
     unkeyed = [s["url"] for s in sites if not s.pop("keyed")]
     if unkeyed:
         raise SystemExit(f"В SITES у {len(unkeyed)} сайт(ов) нет ключа: пиши «ключ=адрес». Ключ из домена "
